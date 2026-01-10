@@ -1,0 +1,10 @@
+{
+  "_generated": "rust-bucket v0.2.0",
+  "name": "Rust-Bucket",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+}
