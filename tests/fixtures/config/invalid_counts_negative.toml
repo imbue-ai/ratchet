@@ -1,0 +1,3 @@
+# Invalid: negative count
+[no-unwrap]
+"." = -5

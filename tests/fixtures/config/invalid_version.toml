@@ -1,0 +1,4 @@
+# Invalid: unsupported version
+[ratchet]
+version = "2"
+languages = ["rust"]

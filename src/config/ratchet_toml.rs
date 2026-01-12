@@ -562,4 +562,258 @@ languages = ["rust", "invalid"]
         assert_eq!(config.output.format, deserialized.output.format);
         assert_eq!(config.output.color, deserialized.output.color);
     }
+
+    #[test]
+    fn test_missing_languages_field() {
+        let invalid = r#"
+[ratchet]
+version = "1"
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_include_patterns() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = []
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.ratchet.include.len(), 0);
+    }
+
+    #[test]
+    fn test_multiple_glob_patterns() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs"]
+exclude = ["**/target/**", "**/generated/**", "**/*.bak"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.ratchet.include.len(), 3);
+        assert_eq!(config.ratchet.exclude.len(), 3);
+    }
+
+    #[test]
+    fn test_rule_disabled_explicitly() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules]
+no-unwrap = false
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(
+            config.rules.builtin.get(&RuleId::new("no-unwrap").unwrap()),
+            Some(&RuleValue::Enabled(false))
+        );
+    }
+
+    #[test]
+    fn test_rule_with_only_severity() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules]
+my-rule = { severity = "info" }
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        match config.rules.builtin.get(&RuleId::new("my-rule").unwrap()) {
+            Some(RuleValue::Settings(settings)) => {
+                assert_eq!(settings.severity, Some(Severity::Info));
+                assert!(settings.regions.is_none());
+            }
+            _ => panic!("Expected settings for my-rule"),
+        }
+    }
+
+    #[test]
+    fn test_rule_with_only_regions() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules]
+my-rule = { regions = ["src/**"] }
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        match config.rules.builtin.get(&RuleId::new("my-rule").unwrap()) {
+            Some(RuleValue::Settings(settings)) => {
+                assert!(settings.severity.is_none());
+                assert_eq!(settings.regions.as_ref().unwrap().len(), 1);
+            }
+            _ => panic!("Expected settings for my-rule"),
+        }
+    }
+
+    #[test]
+    fn test_output_format_default() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.output.format, OutputFormat::Human);
+    }
+
+    #[test]
+    fn test_color_option_default() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.output.color, ColorOption::Auto);
+    }
+
+    #[test]
+    fn test_version_must_be_string() {
+        let invalid = r#"
+[ratchet]
+version = 1
+languages = ["rust"]
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_complex_rule_combinations() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust", "python"]
+
+[rules]
+rule-1 = true
+rule-2 = false
+rule-3 = { severity = "error" }
+rule-4 = { regions = ["src/**"] }
+rule-5 = { severity = "warning", regions = ["tests/**"] }
+
+[rules.custom]
+custom-1 = true
+custom-2 = { severity = "info" }
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.rules.builtin.len(), 5);
+        assert_eq!(config.rules.custom.len(), 2);
+    }
+
+    #[test]
+    fn test_invalid_output_format() {
+        let invalid = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[output]
+format = "xml"
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_color_option() {
+        let invalid = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[output]
+color = "sometimes"
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_severity() {
+        let invalid = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules]
+my-rule = { severity = "critical" }
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_custom_rule_with_invalid_region_glob() {
+        let invalid = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules.custom]
+my-rule = { regions = ["[invalid"] }
+"#;
+
+        let result = Config::parse(invalid);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid region glob pattern")
+        );
+    }
+
+    #[test]
+    fn test_all_supported_languages() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust", "typescript", "javascript", "python", "go"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.ratchet.languages.len(), 5);
+    }
+
+    #[test]
+    fn test_single_language() {
+        for lang in &["rust", "typescript", "javascript", "python", "go"] {
+            let config_str = format!(
+                r#"
+[ratchet]
+version = "1"
+languages = ["{}"]
+"#,
+                lang
+            );
+
+            let config = Config::parse(&config_str).unwrap();
+            assert_eq!(config.ratchet.languages.len(), 1);
+        }
+    }
 }

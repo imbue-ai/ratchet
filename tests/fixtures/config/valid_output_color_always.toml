@@ -1,0 +1,7 @@
+# Valid: Always colorize output
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[output]
+color = "always"

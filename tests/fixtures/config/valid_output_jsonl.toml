@@ -1,0 +1,8 @@
+# Valid: JSONL output format
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[output]
+format = "jsonl"
+color = "never"

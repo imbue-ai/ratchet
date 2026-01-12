@@ -1,0 +1,7 @@
+# Invalid: malformed glob pattern in rule regions
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[rules]
+no-unwrap = { regions = ["[invalid-bracket"] }

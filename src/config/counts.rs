@@ -598,4 +598,276 @@ mod tests {
             reparsed.get_budget(&no_todo, Path::new("src/main.rs"))
         );
     }
+
+    #[test]
+    fn test_region_tree_get_budget_deeply_nested() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("a"), 10);
+        tree.set_count(&RegionPath::new("a/b"), 20);
+        tree.set_count(&RegionPath::new("a/b/c"), 30);
+
+        // Verify each level inherits correctly
+        assert_eq!(tree.get_budget(Path::new("x/y.rs")), 0); // Root default
+        assert_eq!(tree.get_budget(Path::new("a/file.rs")), 10);
+        assert_eq!(tree.get_budget(Path::new("a/b/file.rs")), 20);
+        assert_eq!(tree.get_budget(Path::new("a/b/c/file.rs")), 30);
+
+        // Deeper nesting should inherit from nearest parent
+        assert_eq!(tree.get_budget(Path::new("a/b/c/d/e/file.rs")), 30);
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_sibling_regions() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("src"), 10);
+        tree.set_count(&RegionPath::new("tests"), 20);
+        tree.set_count(&RegionPath::new("benches"), 30);
+
+        // Verify siblings don't interfere with each other
+        assert_eq!(tree.get_budget(Path::new("src/main.rs")), 10);
+        assert_eq!(tree.get_budget(Path::new("tests/test.rs")), 20);
+        assert_eq!(tree.get_budget(Path::new("benches/bench.rs")), 30);
+
+        // Files in other locations should inherit from root
+        assert_eq!(tree.get_budget(Path::new("docs/readme.md")), 0);
+    }
+
+    #[test]
+    fn test_counts_manager_parse_empty_file() {
+        let toml = "";
+        let manager = CountsManager::parse(toml).unwrap();
+
+        // Empty file should parse successfully
+        let rule_id = RuleId::new("any-rule").unwrap();
+        assert_eq!(manager.get_budget(&rule_id, Path::new("src/foo.rs")), 0);
+    }
+
+    #[test]
+    fn test_counts_manager_parse_only_root_counts() {
+        let toml = r#"
+[no-unwrap]
+"." = 5
+
+[no-todo]
+"." = 10
+        "#;
+
+        let manager = CountsManager::parse(toml).unwrap();
+
+        let no_unwrap = RuleId::new("no-unwrap").unwrap();
+        let no_todo = RuleId::new("no-todo").unwrap();
+
+        // All files should inherit from root
+        assert_eq!(manager.get_budget(&no_unwrap, Path::new("src/foo.rs")), 5);
+        assert_eq!(manager.get_budget(&no_unwrap, Path::new("a/b/c.rs")), 5);
+        assert_eq!(manager.get_budget(&no_todo, Path::new("src/foo.rs")), 10);
+        assert_eq!(manager.get_budget(&no_todo, Path::new("x/y/z.rs")), 10);
+    }
+
+    #[test]
+    fn test_counts_manager_parse_zero_counts() {
+        let toml = r#"
+[no-unwrap]
+"." = 0
+"src/legacy" = 0
+        "#;
+
+        let manager = CountsManager::parse(toml).unwrap();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+
+        // Zero counts should be preserved
+        assert_eq!(manager.get_budget(&rule_id, Path::new("src/foo.rs")), 0);
+        assert_eq!(
+            manager.get_budget(&rule_id, Path::new("src/legacy/bar.rs")),
+            0
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_parse_large_counts() {
+        let toml = r#"
+[no-unwrap]
+"." = 999999
+"src" = 1000000
+        "#;
+
+        let manager = CountsManager::parse(toml).unwrap();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+
+        // Large counts should be supported
+        assert_eq!(manager.get_budget(&rule_id, Path::new("root.rs")), 999999);
+        assert_eq!(
+            manager.get_budget(&rule_id, Path::new("src/main.rs")),
+            1000000
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_set_count_creates_new_rule() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("new-rule").unwrap();
+        let region = RegionPath::new("src");
+
+        // Setting count for non-existent rule should create it
+        manager.set_count(&rule_id, &region, 42);
+
+        assert_eq!(manager.get_budget(&rule_id, Path::new("src/file.rs")), 42);
+    }
+
+    #[test]
+    fn test_counts_manager_set_count_multiple_regions() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("my-rule").unwrap();
+
+        manager.set_count(&rule_id, &RegionPath::new("."), 0);
+        manager.set_count(&rule_id, &RegionPath::new("src"), 10);
+        manager.set_count(&rule_id, &RegionPath::new("tests"), 20);
+
+        assert_eq!(manager.get_budget(&rule_id, Path::new("root.rs")), 0);
+        assert_eq!(manager.get_budget(&rule_id, Path::new("src/main.rs")), 10);
+        assert_eq!(manager.get_budget(&rule_id, Path::new("tests/test.rs")), 20);
+    }
+
+    #[test]
+    fn test_counts_manager_to_toml_string_sorted_output() {
+        let mut manager = CountsManager::new();
+
+        // Add rules in non-alphabetical order
+        manager.set_count(
+            &RuleId::new("zebra-rule").unwrap(),
+            &RegionPath::new("."),
+            1,
+        );
+        manager.set_count(
+            &RuleId::new("alpha-rule").unwrap(),
+            &RegionPath::new("."),
+            2,
+        );
+        manager.set_count(&RuleId::new("beta-rule").unwrap(), &RegionPath::new("."), 3);
+
+        let toml = manager.to_toml_string();
+
+        // Verify alphabetical ordering in output
+        let alpha_pos = toml.find("[alpha-rule]").unwrap();
+        let beta_pos = toml.find("[beta-rule]").unwrap();
+        let zebra_pos = toml.find("[zebra-rule]").unwrap();
+
+        assert!(alpha_pos < beta_pos);
+        assert!(beta_pos < zebra_pos);
+    }
+
+    #[test]
+    fn test_counts_manager_parse_invalid_rule_not_table() {
+        let toml = r#"
+no-unwrap = 5
+        "#;
+
+        let result = CountsManager::parse(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_counts_manager_parse_invalid_toml_syntax() {
+        let toml = r#"
+[no-unwrap
+"." = 0
+        "#;
+
+        let result = CountsManager::parse(toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_region_tree_default_trait() {
+        let tree = RegionTree::default();
+        assert_eq!(tree.root_count, 0);
+        assert!(tree.overrides.is_empty());
+    }
+
+    #[test]
+    fn test_counts_manager_default_trait() {
+        let manager = CountsManager::default();
+        assert!(manager.counts.is_empty());
+    }
+
+    #[test]
+    fn test_counts_manager_parse_windows_style_paths() {
+        // CountsManager should handle normalized region paths
+        let toml = r#"
+[no-unwrap]
+"." = 0
+"src/legacy" = 10
+        "#;
+
+        let manager = CountsManager::parse(toml).unwrap();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+
+        // Both Unix and Windows style paths should work (internally normalized)
+        assert_eq!(
+            manager.get_budget(&rule_id, Path::new("src/legacy/file.rs")),
+            10
+        );
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_with_trailing_slash() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("src"), 10);
+
+        // Path normalization should handle trailing slashes
+        assert_eq!(tree.get_budget(Path::new("src/main.rs")), 10);
+    }
+
+    #[test]
+    fn test_counts_manager_multiple_rules_same_regions() {
+        let toml = r#"
+[rule-a]
+"." = 1
+"src" = 2
+
+[rule-b]
+"." = 10
+"src" = 20
+
+[rule-c]
+"." = 100
+"src" = 200
+        "#;
+
+        let manager = CountsManager::parse(toml).unwrap();
+
+        let rule_a = RuleId::new("rule-a").unwrap();
+        let rule_b = RuleId::new("rule-b").unwrap();
+        let rule_c = RuleId::new("rule-c").unwrap();
+
+        // Each rule should maintain independent budgets
+        assert_eq!(manager.get_budget(&rule_a, Path::new("src/x.rs")), 2);
+        assert_eq!(manager.get_budget(&rule_b, Path::new("src/x.rs")), 20);
+        assert_eq!(manager.get_budget(&rule_c, Path::new("src/x.rs")), 200);
+    }
+
+    #[test]
+    fn test_counts_manager_to_toml_regions_sorted() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("test-rule").unwrap();
+
+        // Add regions in non-alphabetical order
+        manager.set_count(&rule_id, &RegionPath::new("z/region"), 1);
+        manager.set_count(&rule_id, &RegionPath::new("a/region"), 2);
+        manager.set_count(&rule_id, &RegionPath::new("m/region"), 3);
+
+        let toml = manager.to_toml_string();
+
+        // Find positions of each region
+        let a_pos = toml.find("\"a/region\"").unwrap();
+        let m_pos = toml.find("\"m/region\"").unwrap();
+        let z_pos = toml.find("\"z/region\"").unwrap();
+
+        // Verify alphabetical ordering
+        assert!(a_pos < m_pos);
+        assert!(m_pos < z_pos);
+    }
 }

@@ -1,0 +1,4 @@
+# Invalid: unsupported language name
+[ratchet]
+version = "1"
+languages = ["rust", "cobol"]

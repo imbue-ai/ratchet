@@ -1,0 +1,5 @@
+# Invalid: malformed glob pattern in exclude
+[ratchet]
+version = "1"
+languages = ["rust"]
+exclude = ["[invalid-bracket"]

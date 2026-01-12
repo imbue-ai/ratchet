@@ -1,0 +1,13 @@
+# Multiple rules with multiple regions
+[no-unwrap]
+"." = 0
+"src/legacy" = 15
+"src/legacy/parser" = 7
+"tests" = 50
+
+[no-todo-comments]
+"." = 0
+"src" = 23
+
+[my-company-rule]
+"src/experimental" = 5

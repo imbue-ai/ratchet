@@ -1,0 +1,3 @@
+# Invalid: missing languages field
+[ratchet]
+version = "1"

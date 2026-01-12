@@ -1,0 +1,6 @@
+# Test inheritance scenarios
+[no-unwrap]
+"." = 0
+"src" = 100
+"src/legacy" = 50
+"src/legacy/parser" = 10

@@ -1,0 +1,20 @@
+# Full valid ratchet configuration with all options
+[ratchet]
+version = "1"
+languages = ["rust", "typescript", "python"]
+include = ["src/**", "tests/**"]
+exclude = ["**/generated/**", "**/vendor/**"]
+
+[rules]
+no-unwrap = true
+no-expect = true
+no-todo-comments = { severity = "warning" }
+no-fixme-comments = false
+
+[rules.custom]
+my-company-rule = true
+legacy-api-usage = { regions = ["src/legacy/**"] }
+
+[output]
+format = "human"
+color = "auto"

@@ -1,0 +1,4 @@
+# Simple counts with single rule and single region
+[no-unwrap]
+"." = 0
+"src/legacy" = 10
