@@ -1,6 +1,6 @@
 {
   "_generated": "rust-bucket v0.2.0",
-  "name": "Rust-Bucket",
+  "name": "ratchet",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "."

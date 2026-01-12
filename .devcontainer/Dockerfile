@@ -22,13 +22,18 @@ RUN cargo install cargo-nextest --locked
 # bd must be available on PATH
 # NOTE: Beads is a Go project, NOT a Rust crate. Install via official shell script.
 # Do NOT use "cargo install beads" - that installs an unrelated empty crate.
-# Install Go first, then build beads from source at specific version
-RUN apt-get update && apt-get install -y --no-install-recommends golang-go && rm -rf /var/lib/apt/lists/* && \
-    go install github.com/steveyegge/beads/cmd/bd@v0.46.0 && \
+# Install Go 1.24+ (required for beads v0.46.0) from official binary distribution.
+# Debian bookworm's golang-go package provides only Go 1.19, which is too old.
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then GOARCH="amd64"; \
+    elif [ "$ARCH" = "arm64" ]; then GOARCH="arm64"; \
+    else echo "Unsupported architecture: $ARCH" && exit 1; fi && \
+    curl -fsSL "https://go.dev/dl/go1.24.2.linux-${GOARCH}.tar.gz" | tar -C /usr/local -xzf - && \
+    /usr/local/go/bin/go install github.com/steveyegge/beads/cmd/bd@v0.46.0 && \
     (command -v bd || ln -sf /root/go/bin/bd /usr/local/bin/bd 2>/dev/null || true)
 
 # Ensure all tool binaries are on PATH
-ENV PATH="/root/go/bin:/root/.local/bin:/root/.cargo/bin:${PATH}"
+ENV PATH="/usr/local/go/bin:/root/go/bin:/root/.local/bin:/root/.cargo/bin:${PATH}"
 
 # Set working directory
 WORKDIR /workspace
