@@ -138,11 +138,11 @@ fn default_include() -> Vec<GlobPattern> {
 /// Rules configuration section
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct RulesConfig {
-    /// Built-in rules (flattened from [rules] table, excluding [rules.custom])
+    /// Built-in rules (flattened from `[rules]` table, excluding `[rules.custom]`)
     #[serde(flatten)]
     pub builtin: HashMap<RuleId, RuleValue>,
 
-    /// Custom rules from [rules.custom] section
+    /// Custom rules from `[rules.custom]` section
     #[serde(default)]
     pub custom: HashMap<RuleId, RuleValue>,
 }
