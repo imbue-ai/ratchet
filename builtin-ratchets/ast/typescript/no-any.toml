@@ -6,6 +6,6 @@ severity = "error"
 [match]
 language = "typescript"
 query = """
-(type_identifier) @type
-(#eq? @type "any") @violation
+(type_identifier) @violation
+(#eq? @violation "any")
 """
