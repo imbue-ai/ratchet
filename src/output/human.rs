@@ -526,4 +526,299 @@ mod tests {
         let _always = HumanFormatter::new(ColorChoice::Always);
         let _auto = HumanFormatter::new(ColorChoice::Auto);
     }
+
+    #[test]
+    fn test_format_with_special_characters_in_paths() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Test with spaces in path
+        let violations1 = vec![create_test_violation(
+            "no-unwrap",
+            "src/my file.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+
+        // Test with unicode in path
+        let violations2 = vec![create_test_violation(
+            "no-todo",
+            "src/日本語.rs",
+            "src",
+            20,
+            "// TODO: fix",
+        )];
+
+        let status1 = create_test_status("no-unwrap", "src", 1, 5, violations1);
+        let status2 = create_test_status("no-todo", "src", 1, 3, violations2);
+
+        let result = AggregationResult {
+            statuses: vec![status1, status2],
+            passed: true,
+            total_violations: 2,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify paths with special characters are handled correctly
+        assert!(output.contains("src/my file.rs:10:5"));
+        assert!(output.contains("src/日本語.rs:20:5"));
+    }
+
+    #[test]
+    fn test_format_with_special_characters_in_snippets() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Test with various special characters in snippets
+        let violations = vec![
+            create_test_violation(
+                "no-unwrap",
+                "src/main.rs",
+                "src",
+                10,
+                "\"hello\\nworld\".unwrap()",
+            ),
+            create_test_violation("no-unwrap", "src/lib.rs", "src", 20, "emoji: 🦀.unwrap()"),
+            create_test_violation(
+                "no-unwrap",
+                "src/util.rs",
+                "src",
+                30,
+                "json: {\"key\": \"value\"}.unwrap()",
+            ),
+        ];
+
+        let status = create_test_status("no-unwrap", "src", 3, 5, violations);
+
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify special characters in snippets are preserved
+        assert!(output.contains("\"hello\\nworld\".unwrap()"));
+        assert!(output.contains("emoji: 🦀.unwrap()"));
+        assert!(output.contains("json: {\"key\": \"value\"}.unwrap()"));
+    }
+
+    #[test]
+    fn test_format_with_leading_trailing_whitespace() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Test snippet trimming behavior
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            "    .unwrap()    ",
+        )];
+
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify whitespace is trimmed in output
+        assert!(output.contains(".unwrap()"));
+        // Should not have leading/trailing spaces around the snippet
+        let lines: Vec<&str> = output.lines().collect();
+        let snippet_line = lines.iter().find(|l| l.contains(".unwrap()")).unwrap();
+        assert_eq!(snippet_line.trim_end(), "      .unwrap()");
+    }
+
+    #[test]
+    fn test_format_deterministic_output() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Create the same result multiple times and verify output is identical
+        let violations = vec![
+            create_test_violation("no-unwrap", "src/main.rs", "src", 10, ".unwrap()"),
+            create_test_violation("no-todo", "src/lib.rs", "src", 20, "// TODO: fix"),
+        ];
+
+        let status1 = create_test_status("no-unwrap", "src", 1, 5, vec![violations[0].clone()]);
+        let status2 = create_test_status("no-todo", "src", 1, 3, vec![violations[1].clone()]);
+
+        let result = AggregationResult {
+            statuses: vec![status1, status2],
+            passed: true,
+            total_violations: 2,
+            violations_over_budget: 0,
+        };
+
+        // Format multiple times
+        let output1 = formatter.format(&result);
+        let output2 = formatter.format(&result);
+        let output3 = formatter.format(&result);
+
+        // All outputs should be identical
+        assert_eq!(output1, output2);
+        assert_eq!(output2, output3);
+    }
+
+    #[test]
+    fn test_format_color_choice_never() {
+        // Test with ColorChoice::Never explicitly
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+        // format() always returns plain text without ANSI codes regardless of color_choice
+        // This is just testing that it doesn't error
+        assert!(output.contains("no-unwrap"));
+    }
+
+    #[test]
+    fn test_format_color_choice_always() {
+        // Test with ColorChoice::Always
+        let formatter = HumanFormatter::new(ColorChoice::Always);
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+        // format() always returns plain text without ANSI codes regardless of color_choice
+        // This is just testing that it doesn't error
+        assert!(output.contains("no-unwrap"));
+    }
+
+    #[test]
+    fn test_format_color_choice_auto() {
+        // Test with ColorChoice::Auto
+        let formatter = HumanFormatter::new(ColorChoice::Auto);
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+        // format() always returns plain text without ANSI codes regardless of color_choice
+        // This is just testing that it doesn't error
+        assert!(output.contains("no-unwrap"));
+    }
+
+    #[test]
+    fn test_format_empty_snippet() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            "",
+        )];
+
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Should handle empty snippets gracefully
+        assert!(output.contains("src/main.rs:10:5"));
+    }
+
+    #[test]
+    fn test_format_long_snippet() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        let long_snippet = "a".repeat(500);
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            &long_snippet,
+        )];
+
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Should handle long snippets without crashing
+        assert!(output.contains("src/main.rs:10:5"));
+        assert!(output.contains(&long_snippet));
+    }
+
+    #[test]
+    fn test_format_region_status_no_violations() {
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Create a status with 0 actual violations but positive budget
+        let status = create_test_status("no-unwrap", "src", 0, 5, vec![]);
+
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 0,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Should still show the rule in summary even with no violations
+        assert!(output.contains("no-unwrap"));
+        assert!(output.contains("0 violations (budget: 5)"));
+        assert!(output.contains("✓"));
+        assert!(output.contains("Check PASSED"));
+    }
 }

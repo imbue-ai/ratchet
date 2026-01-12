@@ -510,4 +510,421 @@ mod tests {
         assert_eq!(v2["line"], 20);
         assert_eq!(v3["line"], 30);
     }
+
+    #[test]
+    fn test_special_characters_in_paths() {
+        let formatter = JsonlFormatter::new();
+
+        // Test with spaces, unicode, and special characters in paths
+        let violations = vec![
+            create_test_violation(
+                "no-unwrap",
+                "src/my file.rs",
+                "src",
+                10,
+                5,
+                ".unwrap()",
+                "message",
+            ),
+            create_test_violation(
+                "no-todo",
+                "src/日本語.rs",
+                "src",
+                20,
+                5,
+                "// TODO",
+                "message",
+            ),
+            create_test_violation(
+                "no-panic",
+                "src/file's.rs",
+                "src",
+                30,
+                5,
+                "panic!",
+                "message",
+            ),
+        ];
+
+        let status1 = create_test_status("no-unwrap", "src", 1, 5, vec![violations[0].clone()]);
+        let status2 = create_test_status("no-todo", "src", 1, 5, vec![violations[1].clone()]);
+        let status3 = create_test_status("no-panic", "src", 1, 5, vec![violations[2].clone()]);
+
+        let result = AggregationResult {
+            statuses: vec![status1, status2, status3],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify all lines are valid JSON
+        for line in output.lines() {
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
+            assert!(parsed.is_ok(), "Invalid JSON: {}", line);
+        }
+
+        // Verify special characters in paths are properly JSON-encoded
+        // Violations are sorted by rule, then file, then line
+        let lines: Vec<&str> = output.lines().collect();
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+
+        // Sorted order: no-panic, no-todo, no-unwrap
+        assert_eq!(v1["rule"], "no-panic");
+        assert_eq!(v1["file"], "src/file's.rs");
+        assert_eq!(v2["rule"], "no-todo");
+        assert_eq!(v2["file"], "src/日本語.rs");
+        assert_eq!(v3["rule"], "no-unwrap");
+        assert_eq!(v3["file"], "src/my file.rs");
+    }
+
+    #[test]
+    fn test_special_characters_in_snippets() {
+        let formatter = JsonlFormatter::new();
+
+        // Test with various special characters in snippets
+        let violations = vec![
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                1,
+                1,
+                "\"hello\\nworld\"",
+                "newline in snippet",
+            ),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                2,
+                1,
+                "emoji: 🦀",
+                "emoji in snippet",
+            ),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                3,
+                1,
+                "{\"key\": \"value\"}",
+                "json in snippet",
+            ),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                4,
+                1,
+                "tab:\there",
+                "tab character",
+            ),
+        ];
+
+        let status = create_test_status("test", "src", 4, 10, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 4,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify all lines are valid JSON
+        for line in output.lines() {
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
+            assert!(parsed.is_ok(), "Invalid JSON: {}", line);
+        }
+
+        // Verify special characters are properly escaped
+        let lines: Vec<&str> = output.lines().collect();
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+        let v4: serde_json::Value = serde_json::from_str(lines[3]).unwrap();
+
+        assert_eq!(v1["snippet"], "\"hello\\nworld\"");
+        assert_eq!(v2["snippet"], "emoji: 🦀");
+        assert_eq!(v3["snippet"], "{\"key\": \"value\"}");
+        assert_eq!(v4["snippet"], "tab:\there");
+    }
+
+    #[test]
+    fn test_deterministic_output() {
+        let formatter = JsonlFormatter::new();
+
+        // Create a complex result with multiple violations
+        let violations1 = vec![
+            create_test_violation("rule-b", "src/z.rs", "src", 20, 5, "snippet2", "message2"),
+            create_test_violation("rule-a", "src/a.rs", "src", 10, 5, "snippet1", "message1"),
+        ];
+        let violations2 = vec![create_test_violation(
+            "rule-c",
+            "tests/test.rs",
+            "tests",
+            30,
+            5,
+            "snippet3",
+            "message3",
+        )];
+
+        let status1 = create_test_status("rule-b", "src", 1, 5, vec![violations1[0].clone()]);
+        let status2 = create_test_status("rule-a", "src", 1, 5, vec![violations1[1].clone()]);
+        let status3 = create_test_status("rule-c", "tests", 1, 5, violations2);
+
+        let result = AggregationResult {
+            statuses: vec![status1, status2, status3],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        // Format the same result multiple times
+        let output1 = formatter.format(&result);
+        let output2 = formatter.format(&result);
+        let output3 = formatter.format(&result);
+
+        // All outputs should be byte-for-byte identical
+        assert_eq!(output1, output2);
+        assert_eq!(output2, output3);
+
+        // Verify the output is sorted correctly
+        let lines: Vec<&str> = output1.lines().collect();
+
+        // First 3 lines should be violations sorted by rule, file, line
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+
+        assert_eq!(v1["rule"], "rule-a");
+        assert_eq!(v2["rule"], "rule-b");
+        assert_eq!(v3["rule"], "rule-c");
+
+        // Next 3 lines should be summaries sorted by rule, region
+        let s1: serde_json::Value = serde_json::from_str(lines[3]).unwrap();
+        let s2: serde_json::Value = serde_json::from_str(lines[4]).unwrap();
+        let s3: serde_json::Value = serde_json::from_str(lines[5]).unwrap();
+
+        assert_eq!(s1["type"], "summary");
+        assert_eq!(s1["rule"], "rule-a");
+        assert_eq!(s2["type"], "summary");
+        assert_eq!(s2["rule"], "rule-b");
+        assert_eq!(s3["type"], "summary");
+        assert_eq!(s3["rule"], "rule-c");
+
+        // Last line should be status
+        let status: serde_json::Value = serde_json::from_str(lines[6]).unwrap();
+        assert_eq!(status["type"], "status");
+    }
+
+    #[test]
+    fn test_empty_and_whitespace_snippets() {
+        let formatter = JsonlFormatter::new();
+
+        let violations = vec![
+            create_test_violation("test", "src/test.rs", "src", 1, 1, "", "empty"),
+            create_test_violation("test", "src/test.rs", "src", 2, 1, "   ", "whitespace only"),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                3,
+                1,
+                "\n\n\n",
+                "newlines only",
+            ),
+        ];
+
+        let status = create_test_status("test", "src", 3, 10, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify all lines are valid JSON
+        for line in output.lines() {
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
+            assert!(parsed.is_ok(), "Invalid JSON: {}", line);
+        }
+
+        // Verify snippets are preserved as-is
+        let lines: Vec<&str> = output.lines().collect();
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+
+        assert_eq!(v1["snippet"], "");
+        assert_eq!(v2["snippet"], "   ");
+        assert_eq!(v3["snippet"], "\n\n\n");
+    }
+
+    #[test]
+    fn test_long_snippet_json_encoding() {
+        let formatter = JsonlFormatter::new();
+
+        // Create a very long snippet
+        let long_snippet = "a".repeat(10000);
+        let violations = vec![create_test_violation(
+            "test-rule",
+            "src/test.rs",
+            "src",
+            1,
+            1,
+            &long_snippet,
+            "long snippet",
+        )];
+
+        let status = create_test_status("test-rule", "src", 1, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify the line is valid JSON
+        let lines: Vec<&str> = output.lines().collect();
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(lines[0]);
+        assert!(parsed.is_ok());
+
+        let violation: serde_json::Value = parsed.unwrap();
+        assert_eq!(violation["snippet"], long_snippet);
+    }
+
+    #[test]
+    fn test_special_characters_in_messages() {
+        let formatter = JsonlFormatter::new();
+
+        let violations = vec![
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                1,
+                1,
+                "snippet",
+                "message with \"quotes\"",
+            ),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                2,
+                1,
+                "snippet",
+                "message with 'apostrophe's",
+            ),
+            create_test_violation(
+                "test",
+                "src/test.rs",
+                "src",
+                3,
+                1,
+                "snippet",
+                "message\nwith\nnewlines",
+            ),
+        ];
+
+        let status = create_test_status("test", "src", 3, 10, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+
+        // Verify all lines are valid JSON
+        for line in output.lines() {
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
+            assert!(parsed.is_ok(), "Invalid JSON: {}", line);
+        }
+
+        // Verify messages are properly escaped
+        let lines: Vec<&str> = output.lines().collect();
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+
+        assert_eq!(v1["message"], "message with \"quotes\"");
+        assert_eq!(v2["message"], "message with 'apostrophe's");
+        assert_eq!(v3["message"], "message\nwith\nnewlines");
+    }
+
+    #[test]
+    fn test_region_status_with_no_violations() {
+        let formatter = JsonlFormatter::new();
+
+        // Create a status with no violations but positive budget
+        let status = create_test_status("no-unwrap", "src", 0, 5, vec![]);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 0,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Should have 2 lines: 1 summary + 1 status (no violation records)
+        assert_eq!(lines.len(), 2);
+
+        // Verify summary record
+        let summary: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(summary["type"], "summary");
+        assert_eq!(summary["rule"], "no-unwrap");
+        assert_eq!(summary["violations"], 0);
+        assert_eq!(summary["budget"], 5);
+        assert_eq!(summary["status"], "pass");
+
+        // Verify status record
+        let status: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(status["type"], "status");
+        assert_eq!(status["passed"], true);
+    }
+
+    #[test]
+    fn test_violation_sorting_by_file() {
+        let formatter = JsonlFormatter::new();
+
+        // Create violations with same rule but different files
+        let violations = vec![
+            create_test_violation("rule-a", "src/z.rs", "src", 10, 5, "s1", "m1"),
+            create_test_violation("rule-a", "src/a.rs", "src", 10, 5, "s2", "m2"),
+            create_test_violation("rule-a", "src/m.rs", "src", 10, 5, "s3", "m3"),
+        ];
+
+        let status = create_test_status("rule-a", "src", 3, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 3,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result);
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Verify violations are sorted by file path
+        let v1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        let v3: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+
+        assert_eq!(v1["file"], "src/a.rs");
+        assert_eq!(v2["file"], "src/m.rs");
+        assert_eq!(v3["file"], "src/z.rs");
+    }
 }
