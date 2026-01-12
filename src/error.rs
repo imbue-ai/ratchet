@@ -20,6 +20,18 @@ pub enum ConfigError {
     /// Invalid configuration value
     #[error("Invalid value for {field}: {message}")]
     InvalidValue { field: String, message: String },
+
+    /// Failed to read config file
+    #[error("Failed to read config file: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Failed to parse TOML
+    #[error("Failed to parse TOML: {0}")]
+    Parse(#[from] toml::de::Error),
+
+    /// Invalid configuration
+    #[error("Invalid configuration: {0}")]
+    Validation(String),
 }
 
 /// Rule-related errors
