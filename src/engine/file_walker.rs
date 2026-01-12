@@ -302,7 +302,7 @@ mod tests {
         assert!(
             files
                 .iter()
-                .all(|f| f.path.extension().map_or(false, |ext| ext == "rs"))
+                .all(|f| f.path.extension().is_some_and(|ext| ext == "rs"))
         );
         assert!(!files.is_empty());
 
