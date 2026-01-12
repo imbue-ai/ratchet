@@ -2,7 +2,38 @@
 # These counts represent the maximum tolerated violations.
 # Counts can only be reduced (tightened) or explicitly bumped with justification.
 
-# Example:
-# [no-unwrap]
-# "." = 0
-# "src/legacy" = 15
+[no-expect]
+"src/cli" = 7
+"src/engine" = 8
+
+[no-fixme-comments]
+"." = 3
+".beads" = 1
+"builtin-ratchets/regex" = 2
+"src/config" = 2
+"src/rules" = 6
+
+[no-panic]
+"src/cli" = 21
+"src/config" = 6
+
+[no-todo-comments]
+"." = 9
+".beads" = 1
+"benches" = 14
+"builtin-ratchets/regex" = 2
+"src/cli" = 6
+"src/config" = 14
+"src/engine" = 22
+"src/output" = 36
+"src/rules" = 28
+
+[no-unwrap]
+"src" = 12
+"src/cli" = 65
+"src/config" = 72
+"src/engine" = 44
+"src/output" = 50
+"src/rules" = 82
+"src/rules/ast" = 15
+
