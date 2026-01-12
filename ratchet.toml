@@ -8,7 +8,7 @@ languages = ["rust"]
 # include = ["src/**", "tests/**"]
 
 # File patterns to exclude
-# exclude = ["**/generated/**"]
+exclude = ["**/tests/**"]
 
 [rules]
 # Built-in rules are enabled by default
