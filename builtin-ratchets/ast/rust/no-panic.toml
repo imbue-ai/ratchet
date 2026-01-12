@@ -12,4 +12,4 @@ query = """
 """
 
 # Default: exclude tests
-exclude = ["tests/**", "benches/**"]
+exclude = ["**/tests/**", "**/benches/**"]
