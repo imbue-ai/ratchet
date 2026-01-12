@@ -5,6 +5,7 @@ pub mod bump;
 pub mod check;
 pub mod init;
 pub mod list;
+pub mod merge_driver;
 pub mod tighten;
 
 // Re-export types for convenient access
