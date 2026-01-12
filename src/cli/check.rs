@@ -65,7 +65,7 @@ pub(crate) enum CheckError {
 /// - 0: Success (all rules passed)
 /// - 1: Exceeded (one or more rules exceeded budget)
 /// - 2: Error (configuration/I/O error)
-/// - 3: Parse error (in source file)
+/// - 3: Parse error (invalid TOML configuration)
 pub fn run_check(paths: &[String], format: OutputFormat) -> i32 {
     match run_check_inner(paths, format) {
         Ok(passed) => {
@@ -80,6 +80,8 @@ pub fn run_check(paths: &[String], format: OutputFormat) -> i32 {
             // Determine exit code based on error type
             match e {
                 CheckError::Parse { .. } => EXIT_PARSE_ERROR,
+                // TOML parse errors should return EXIT_PARSE_ERROR
+                CheckError::Config(ConfigError::Parse(_)) => EXIT_PARSE_ERROR,
                 _ => EXIT_ERROR,
             }
         }
