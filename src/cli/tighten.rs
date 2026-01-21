@@ -13,7 +13,7 @@ use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
 use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
-use crate::rules::RuleRegistry;
+use crate::rules::{RuleContext, RuleRegistry};
 use crate::types::{RegionPath, RuleId};
 use std::path::{Path, PathBuf};
 
@@ -213,6 +213,9 @@ fn load_config() -> Result<Config, TightenError> {
 fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, TightenError> {
     let mut registry = RuleRegistry::new();
 
+    // Create RuleContext from config patterns
+    let rule_context = RuleContext::new(config.patterns.clone());
+
     // Load builtin regex rules
     let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
     if builtin_regex_dir.exists() {
@@ -228,13 +231,13 @@ fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, Tight
     // Load custom regex rules
     let custom_regex_dir = PathBuf::from("ratchets").join("regex");
     if custom_regex_dir.exists() {
-        registry.load_custom_regex_rules(&custom_regex_dir)?;
+        registry.load_custom_regex_rules(&custom_regex_dir, Some(&rule_context))?;
     }
 
     // Load custom AST rules
     let custom_ast_dir = PathBuf::from("ratchets").join("ast");
     if custom_ast_dir.exists() {
-        registry.load_custom_ast_rules(&custom_ast_dir)?;
+        registry.load_custom_ast_rules(&custom_ast_dir, Some(&rule_context))?;
     }
 
     // Filter by config

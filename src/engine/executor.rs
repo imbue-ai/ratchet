@@ -447,7 +447,7 @@ language = "rust"
         fs::write(ast_dir.join("unwrap.toml"), ast_rule_content).unwrap();
 
         // Load the AST rule
-        registry.load_custom_ast_rules(&ast_dir).unwrap();
+        registry.load_custom_ast_rules(&ast_dir, None).unwrap();
 
         let engine = ExecutionEngine::new(registry);
         let files = vec![FileEntry::new(test_file)];
@@ -482,7 +482,7 @@ pattern = "TODO"
 "#;
         fs::write(regex_dir.join("todo.toml"), regex_rule_content).unwrap();
 
-        registry.load_custom_regex_rules(&regex_dir).unwrap();
+        registry.load_custom_regex_rules(&regex_dir, None).unwrap();
 
         let engine = ExecutionEngine::new(registry);
         let files = vec![FileEntry::new(test_file)];

@@ -7,7 +7,7 @@
 
 use crate::error::RuleError;
 use crate::rules::ast::ParserCache;
-use crate::rules::{ExecutionContext, Rule, Violation};
+use crate::rules::{ExecutionContext, Rule, RuleContext, Violation};
 use crate::types::{GlobPattern, Language, RegionPath, RuleId, Severity};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
@@ -33,13 +33,20 @@ struct RuleSection {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GlobPatternList {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+#[derive(Debug, Deserialize)]
 struct MatchSection {
     query: String,
     language: Language,
     #[serde(default)]
-    include: Option<Vec<GlobPattern>>,
+    include: Option<GlobPatternList>,
     #[serde(default)]
-    exclude: Option<Vec<GlobPattern>>,
+    exclude: Option<GlobPatternList>,
 }
 
 /// A rule that matches AST patterns using tree-sitter queries
@@ -83,6 +90,28 @@ impl AstRule {
     ///
     /// Returns `RuleError::InvalidQuery` if the tree-sitter query is invalid
     pub fn from_toml(content: &str) -> Result<Self, RuleError> {
+        Self::from_toml_with_context(content, None)
+    }
+
+    /// Parse an AstRule from TOML content with pattern context
+    ///
+    /// This method allows resolving pattern references (e.g., @python_tests) using
+    /// the provided RuleContext.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuleError::InvalidDefinition` if:
+    /// - TOML syntax is invalid
+    /// - Required fields are missing
+    /// - Rule ID is invalid
+    /// - Glob patterns are invalid
+    /// - A pattern reference is not found in the context
+    ///
+    /// Returns `RuleError::InvalidQuery` if the tree-sitter query is invalid
+    pub fn from_toml_with_context(
+        content: &str,
+        ctx: Option<&RuleContext>,
+    ) -> Result<Self, RuleError> {
         // Parse TOML
         let def: AstRuleDefinition = toml::from_str(content)
             .map_err(|e| RuleError::InvalidDefinition(format!("Failed to parse TOML: {}", e)))?;
@@ -100,14 +129,14 @@ impl AstRule {
 
         // Build include GlobSet if specified
         let include = if let Some(patterns) = def.match_section.include {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
         } else {
             None
         };
 
         // Build exclude GlobSet if specified
         let exclude = if let Some(patterns) = def.match_section.exclude {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
         } else {
             None
         };
@@ -263,24 +292,93 @@ fn validate_query(query_source: &str, language: Language) -> Result<(), RuleErro
     Ok(())
 }
 
-/// Build a GlobSet from a list of glob patterns
-fn build_globset(patterns: &[GlobPattern]) -> Result<GlobSet, RuleError> {
+/// Build a GlobSet from a list of glob patterns or references
+fn build_globset_with_context(
+    pattern_list: &GlobPatternList,
+    ctx: Option<&RuleContext>,
+) -> Result<GlobSet, RuleError> {
     let mut builder = GlobSetBuilder::new();
 
-    for pattern in patterns {
-        let glob = Glob::new(pattern.as_str()).map_err(|e| {
-            RuleError::InvalidDefinition(format!(
-                "Invalid glob pattern '{}': {}",
-                pattern.as_str(),
-                e
-            ))
-        })?;
-        builder.add(glob);
+    match pattern_list {
+        GlobPatternList::Single(s) => {
+            // Check if it's a reference
+            if let Some(ref_name) = s.strip_prefix('@') {
+                // Resolve the reference
+                let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                for pattern in patterns {
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            } else {
+                // It's a literal pattern
+                let pattern = GlobPattern::new(s.clone());
+                let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Invalid glob pattern '{}': {}",
+                        pattern.as_str(),
+                        e
+                    ))
+                })?;
+                builder.add(glob);
+            }
+        }
+        GlobPatternList::Multiple(items) => {
+            for item in items {
+                // Check if it's a reference (starts with @)
+                if let Some(ref_name) = item.strip_prefix('@') {
+                    let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                    for pattern in patterns {
+                        let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                            RuleError::InvalidDefinition(format!(
+                                "Invalid glob pattern '{}': {}",
+                                pattern.as_str(),
+                                e
+                            ))
+                        })?;
+                        builder.add(glob);
+                    }
+                } else {
+                    // It's a literal pattern
+                    let pattern = GlobPattern::new(item.clone());
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            }
+        }
     }
 
     builder
         .build()
         .map_err(|e| RuleError::InvalidDefinition(format!("Failed to build GlobSet: {}", e)))
+}
+
+/// Resolve a pattern reference to its actual patterns
+fn resolve_pattern_reference<'a>(
+    ref_name: &str,
+    ctx: Option<&'a RuleContext>,
+) -> Result<&'a [GlobPattern], RuleError> {
+    let ctx = ctx.ok_or_else(|| {
+        RuleError::InvalidDefinition(format!(
+            "Pattern reference '@{}' cannot be resolved: no pattern context provided",
+            ref_name
+        ))
+    })?;
+
+    ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
+        RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
+    })
 }
 
 impl Rule for AstRule {

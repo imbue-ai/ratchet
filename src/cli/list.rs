@@ -88,7 +88,7 @@ fn run_list_inner(format: OutputFormat) -> Result<(), ListError> {
     let counts = load_counts()?;
 
     // 3. Build rule registry (load builtin + custom rules)
-    let mut registry = build_rule_registry()?;
+    let mut registry = build_rule_registry(&config)?;
 
     // 4. Filter rules by config
     registry.filter_by_config(&config.rules);

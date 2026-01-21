@@ -2,7 +2,8 @@
 
 //! Core Rule trait and related types for defining and executing rules
 
-use crate::types::{Language, RegionPath, RuleId, Severity};
+use crate::types::{GlobPattern, Language, RegionPath, RuleId, Severity};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// A placeholder for AST types until tree-sitter is added
@@ -11,6 +12,28 @@ use std::path::{Path, PathBuf};
 /// When tree-sitter is added, this will be replaced with `tree_sitter::Tree`.
 #[derive(Debug)]
 pub struct AstPlaceholder;
+
+/// Context for resolving pattern references in rule definitions
+///
+/// This context contains pattern definitions from ratchet.toml that can be
+/// referenced in rule files using @pattern_name syntax.
+#[derive(Debug, Clone, Default)]
+pub struct RuleContext {
+    /// Map of pattern names to their glob patterns
+    pub patterns: HashMap<String, Vec<GlobPattern>>,
+}
+
+impl RuleContext {
+    /// Create a new RuleContext with the given patterns
+    pub fn new(patterns: HashMap<String, Vec<GlobPattern>>) -> Self {
+        Self { patterns }
+    }
+
+    /// Create an empty RuleContext
+    pub fn empty() -> Self {
+        Self::default()
+    }
+}
 
 /// Execution context provided to rules when they execute
 ///

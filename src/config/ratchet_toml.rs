@@ -20,6 +20,10 @@ pub struct Config {
     /// Output configuration
     #[serde(default)]
     pub output: OutputConfig,
+
+    /// Reusable pattern definitions
+    #[serde(default)]
+    pub patterns: HashMap<String, Vec<GlobPattern>>,
 }
 
 impl Config {
@@ -106,6 +110,20 @@ impl Config {
                         ))
                     })?;
                 }
+            }
+        }
+
+        // Validate pattern definitions
+        for (pattern_name, patterns) in &self.patterns {
+            for pattern in patterns {
+                globset::Glob::new(pattern.as_str()).map_err(|e| {
+                    ConfigError::Validation(format!(
+                        "Invalid glob pattern '{}' in pattern '{}': {}",
+                        pattern.as_str(),
+                        pattern_name,
+                        e
+                    ))
+                })?;
             }
         }
 
@@ -815,5 +833,58 @@ languages = ["{}"]
             let config = Config::parse(&config_str).unwrap();
             assert_eq!(config.ratchet.languages.len(), 1);
         }
+    }
+
+    #[test]
+    fn test_patterns_section() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[patterns]
+python_tests = ["**/test_*.py", "**/*_test.py", "**/tests/**"]
+rust_tests = ["**/tests/**", "**/benches/**"]
+generated = ["**/generated/**", "**/vendor/**"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert_eq!(config.patterns.len(), 3);
+        assert_eq!(config.patterns.get("python_tests").unwrap().len(), 3);
+        assert_eq!(config.patterns.get("rust_tests").unwrap().len(), 2);
+        assert_eq!(config.patterns.get("generated").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_patterns_section_empty() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+"#;
+
+        let config = Config::parse(config_str).unwrap();
+        assert!(config.patterns.is_empty());
+    }
+
+    #[test]
+    fn test_patterns_section_invalid_glob() {
+        let config_str = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+
+[patterns]
+bad_pattern = ["[invalid"]
+"#;
+
+        let result = Config::parse(config_str);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid glob pattern")
+        );
     }
 }
