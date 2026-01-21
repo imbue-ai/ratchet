@@ -85,20 +85,26 @@ src/
 │   └── jsonl.rs            # JSONL structured output
 └── lib.rs                  # Library root (for integration testing)
 
-builtin-ratchets/           # Built-in rules in same format as custom rules
-├── regex/
-│   ├── no-todo-comments.toml
-│   ├── no-fixme-comments.toml
-│   └── ...
-└── ast/
-    ├── rust/
-    │   ├── no-unwrap.toml
-    │   ├── no-expect.toml
+builtin-ratchets/           # Built-in rules in language-first organization
+├── common/
+│   └── regex/
+│       ├── no-todo-comments.toml
+│       ├── no-fixme-comments.toml
+│       └── ...
+├── rust/
+│   ├── ast/
+│   │   ├── no-unwrap.toml
+│   │   ├── no-expect.toml
+│   │   └── ...
+│   └── regex/
+├── typescript/
+│   ├── ast/
+│   │   └── ...
+│   └── regex/
+└── python/
+    ├── ast/
     │   └── ...
-    ├── typescript/
-    │   └── ...
-    └── python/
-        └── ...
+    └── regex/
 ```
 
 ## Key Components

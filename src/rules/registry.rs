@@ -203,13 +203,13 @@ impl RuleRegistry {
     /// Load built-in AST rules from a directory
     ///
     /// This method scans the specified directory for language subdirectories
-    /// (e.g., builtin-ratchets/ast/rust/, builtin-ratchets/ast/python/) and
+    /// (e.g., builtin-ratchets/rust/ast/, builtin-ratchets/python/ast/) and
     /// loads all `.toml` files as AstRules. If the directory doesn't exist,
     /// a warning is logged but the operation succeeds.
     ///
     /// # Arguments
     ///
-    /// * `builtin_dir` - Path to the builtin-ratchets/ast/ directory
+    /// * `builtin_dir` - Path to the builtin-ratchets/{language}/ast/ directory
     ///
     /// # Errors
     ///
@@ -236,7 +236,7 @@ impl RuleRegistry {
             )));
         }
 
-        // Read all entries in the directory (these should be language subdirectories)
+        // Read all entries in the directory (these should be language directories like rust/, python/, etc.)
         let entries = fs::read_dir(builtin_dir).map_err(|e| {
             RuleError::InvalidDefinition(format!(
                 "Failed to read directory {}: {}",
@@ -245,7 +245,7 @@ impl RuleRegistry {
             ))
         })?;
 
-        // Process each language subdirectory
+        // Process each language directory
         for entry in entries {
             let entry = entry.map_err(|e| {
                 RuleError::InvalidDefinition(format!(
@@ -255,15 +255,19 @@ impl RuleRegistry {
                 ))
             })?;
 
-            let path = entry.path();
+            let lang_path = entry.path();
 
             // Only process subdirectories
-            if !path.is_dir() {
+            if !lang_path.is_dir() {
                 continue;
             }
 
-            // Load all AST rules from this language subdirectory
-            self.load_ast_rules_from_dir(&path)?;
+            // Look for an ast/ subdirectory within the language directory
+            let ast_path = lang_path.join("ast");
+            if ast_path.exists() && ast_path.is_dir() {
+                // Load all AST rules from this language's ast subdirectory
+                self.load_ast_rules_from_dir(&ast_path)?;
+            }
         }
 
         Ok(())
@@ -960,15 +964,15 @@ query = "(identifier) @violation"
     fn test_load_builtin_ast_rules_per_language() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create language subdirectories
-        let rust_dir = temp_dir.path().join("rust");
-        let python_dir = temp_dir.path().join("python");
-        fs::create_dir(&rust_dir).unwrap();
-        fs::create_dir(&python_dir).unwrap();
+        // Create language subdirectories with ast/ subdirectories
+        let rust_ast_dir = temp_dir.path().join("rust").join("ast");
+        let python_ast_dir = temp_dir.path().join("python").join("ast");
+        fs::create_dir_all(&rust_ast_dir).unwrap();
+        fs::create_dir_all(&python_ast_dir).unwrap();
 
-        // Create rules in each language directory
-        create_test_ast_rule_file(&rust_dir, "rust-rule.toml", "rust-rule");
-        create_test_ast_rule_file(&python_dir, "python-rule.toml", "python-rule");
+        // Create rules in each language's ast directory
+        create_test_ast_rule_file(&rust_ast_dir, "rust-rule.toml", "rust-rule");
+        create_test_ast_rule_file(&python_ast_dir, "python-rule.toml", "python-rule");
 
         let mut registry = RuleRegistry::new();
         let result = registry.load_builtin_ast_rules(temp_dir.path());
@@ -994,16 +998,16 @@ query = "(identifier) @violation"
         // Create a rule file in the root (should be ignored)
         create_test_ast_rule_file(temp_dir.path(), "root-rule.toml", "root-rule");
 
-        // Create language subdirectory with a rule
-        let rust_dir = temp_dir.path().join("rust");
-        fs::create_dir(&rust_dir).unwrap();
-        create_test_ast_rule_file(&rust_dir, "rust-rule.toml", "rust-rule");
+        // Create language subdirectory with ast/ subdirectory and a rule
+        let rust_ast_dir = temp_dir.path().join("rust").join("ast");
+        fs::create_dir_all(&rust_ast_dir).unwrap();
+        create_test_ast_rule_file(&rust_ast_dir, "rust-rule.toml", "rust-rule");
 
         let mut registry = RuleRegistry::new();
         let result = registry.load_builtin_ast_rules(temp_dir.path());
         assert!(result.is_ok());
 
-        // Should only load from subdirectories, not root files
+        // Should only load from language/ast/ subdirectories, not root files
         assert_eq!(registry.len(), 1);
         assert!(
             registry

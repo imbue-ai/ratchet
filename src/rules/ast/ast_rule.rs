@@ -17,7 +17,7 @@ use tree_sitter::{Query, QueryCursor, Tree};
 /// TOML structure for AST rule definitions
 ///
 /// This structure is deserialized from TOML files in ratchets/ast/ or
-/// builtin-ratchets/ast/ directories.
+/// builtin-ratchets/{language}/ast/ directories.
 #[derive(Debug, Deserialize)]
 struct AstRuleDefinition {
     rule: RuleSection,

@@ -177,16 +177,16 @@ pub(crate) fn build_rule_registry() -> Result<RuleRegistry, CheckError> {
     registry.load_embedded_builtin_regex_rules()?;
     registry.load_embedded_builtin_ast_rules()?;
 
-    // Load builtin regex rules from builtin-ratchets/regex/ (for overrides or development)
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("regex");
+    // Load builtin regex rules from builtin-ratchets/common/regex/ (for overrides or development)
+    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
     if builtin_regex_dir.exists() {
         registry.load_builtin_regex_rules(&builtin_regex_dir)?;
     }
 
-    // Load builtin AST rules from builtin-ratchets/ast/ (for overrides or development)
-    let builtin_ast_dir = PathBuf::from("builtin-ratchets").join("ast");
-    if builtin_ast_dir.exists() {
-        registry.load_builtin_ast_rules(&builtin_ast_dir)?;
+    // Load builtin AST rules from builtin-ratchets/{language}/ast/ (for overrides or development)
+    let builtin_ratchets_dir = PathBuf::from("builtin-ratchets");
+    if builtin_ratchets_dir.exists() {
+        registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
     }
 
     // Load custom regex rules from ratchets/regex/

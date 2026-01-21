@@ -17,11 +17,11 @@ type RuleList = Vec<(RuleId, Box<dyn Rule>)>;
 const BUILTIN_REGEX_RULES: &[(&str, &str)] = &[
     (
         "no-todo-comments",
-        include_str!("../../builtin-ratchets/regex/no-todo-comments.toml"),
+        include_str!("../../builtin-ratchets/common/regex/no-todo-comments.toml"),
     ),
     (
         "no-fixme-comments",
-        include_str!("../../builtin-ratchets/regex/no-fixme-comments.toml"),
+        include_str!("../../builtin-ratchets/common/regex/no-fixme-comments.toml"),
     ),
 ];
 
@@ -30,15 +30,15 @@ const BUILTIN_REGEX_RULES: &[(&str, &str)] = &[
 const BUILTIN_AST_RUST_RULES: &[(&str, &str)] = &[
     (
         "no-unwrap",
-        include_str!("../../builtin-ratchets/ast/rust/no-unwrap.toml"),
+        include_str!("../../builtin-ratchets/rust/ast/no-unwrap.toml"),
     ),
     (
         "no-panic",
-        include_str!("../../builtin-ratchets/ast/rust/no-panic.toml"),
+        include_str!("../../builtin-ratchets/rust/ast/no-panic.toml"),
     ),
     (
         "no-expect",
-        include_str!("../../builtin-ratchets/ast/rust/no-expect.toml"),
+        include_str!("../../builtin-ratchets/rust/ast/no-expect.toml"),
     ),
 ];
 
@@ -46,14 +46,14 @@ const BUILTIN_AST_RUST_RULES: &[(&str, &str)] = &[
 #[cfg(feature = "lang-python")]
 const BUILTIN_AST_PYTHON_RULES: &[(&str, &str)] = &[(
     "no-bare-except",
-    include_str!("../../builtin-ratchets/ast/python/no-bare-except.toml"),
+    include_str!("../../builtin-ratchets/python/ast/no-bare-except.toml"),
 )];
 
 /// Embedded built-in AST rule files for TypeScript
 #[cfg(feature = "lang-typescript")]
 const BUILTIN_AST_TYPESCRIPT_RULES: &[(&str, &str)] = &[(
     "no-any",
-    include_str!("../../builtin-ratchets/ast/typescript/no-any.toml"),
+    include_str!("../../builtin-ratchets/typescript/ast/no-any.toml"),
 )];
 
 /// Load all built-in regex rules from embedded resources

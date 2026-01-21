@@ -168,15 +168,15 @@ fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, BumpE
     let mut registry = RuleRegistry::new();
 
     // Load builtin regex rules
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("regex");
+    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
     if builtin_regex_dir.exists() {
         registry.load_builtin_regex_rules(&builtin_regex_dir)?;
     }
 
     // Load builtin AST rules
-    let builtin_ast_dir = PathBuf::from("builtin-ratchets").join("ast");
-    if builtin_ast_dir.exists() {
-        registry.load_builtin_ast_rules(&builtin_ast_dir)?;
+    let builtin_ratchets_dir = PathBuf::from("builtin-ratchets");
+    if builtin_ratchets_dir.exists() {
+        registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
     }
 
     // Load custom regex rules
@@ -228,14 +228,14 @@ fn get_current_violation_count(
         let mut temp_registry = RuleRegistry::new();
 
         // Load all rules again
-        let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("regex");
+        let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
         if builtin_regex_dir.exists() {
             temp_registry.load_builtin_regex_rules(&builtin_regex_dir)?;
         }
 
-        let builtin_ast_dir = PathBuf::from("builtin-ratchets").join("ast");
-        if builtin_ast_dir.exists() {
-            temp_registry.load_builtin_ast_rules(&builtin_ast_dir)?;
+        let builtin_ratchets_dir = PathBuf::from("builtin-ratchets");
+        if builtin_ratchets_dir.exists() {
+            temp_registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
         }
 
         let custom_regex_dir = PathBuf::from("ratchets").join("regex");

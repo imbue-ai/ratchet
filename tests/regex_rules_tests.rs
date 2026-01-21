@@ -21,6 +21,7 @@ fn fixtures_dir() -> PathBuf {
 fn builtin_rules_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("builtin-ratchets")
+        .join("common")
         .join("regex")
 }
 

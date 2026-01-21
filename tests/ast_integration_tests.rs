@@ -12,7 +12,7 @@ use std::path::Path;
 
 /// Helper function to load a built-in AST rule
 fn load_builtin_rule(language: &str, rule_name: &str) -> AstRule {
-    let path = format!("builtin-ratchets/ast/{}/{}.toml", language, rule_name);
+    let path = format!("builtin-ratchets/{}/ast/{}.toml", language, rule_name);
     AstRule::from_path(Path::new(&path))
         .unwrap_or_else(|e| panic!("Failed to load rule {}: {}", path, e))
 }
