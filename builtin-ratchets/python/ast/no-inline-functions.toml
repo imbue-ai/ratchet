@@ -1,0 +1,16 @@
+[rule]
+id = "no-inline-functions"
+description = "Functions should not be defined inside other functions in non-test code. Extract them as top-level functions or methods"
+severity = "warning"
+
+[match]
+language = "python"
+query = """
+(function_definition
+  body: (block
+    (function_definition) @violation))
+"""
+exclude = "@python_tests"
+
+# This matches function definitions that are nested inside other function definitions.
+# The exclude pattern will prevent this from firing in test files.

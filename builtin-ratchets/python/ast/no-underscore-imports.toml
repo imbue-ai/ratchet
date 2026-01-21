@@ -1,0 +1,25 @@
+[rule]
+id = "no-underscore-imports"
+description = "Do not import underscore-prefixed functions/classes/constants in non-test code. These are private"
+severity = "warning"
+
+[match]
+language = "python"
+query = """
+(import_from_statement
+  (aliased_import
+    name: (dotted_name
+      (identifier) @name
+      (#match? @name "^_"))) @violation)
+
+(import_from_statement
+  (dotted_name
+    (identifier) @name
+    (#match? @name "^_")) @violation)
+"""
+exclude = "@python_tests"
+
+# This matches import statements where the imported name starts with an underscore.
+# For example: from module import _private_function
+# We need two patterns: one for aliased imports and one for regular imports.
+# The #match? predicate uses a regex to check if the name starts with underscore.

@@ -76,10 +76,28 @@ const BUILTIN_AST_RUST_RULES: &[(&str, &str)] = &[
 
 /// Embedded built-in AST rule files for Python
 #[cfg(feature = "lang-python")]
-const BUILTIN_AST_PYTHON_RULES: &[(&str, &str)] = &[(
-    "no-bare-except",
-    include_str!("../../builtin-ratchets/python/ast/no-bare-except.toml"),
-)];
+const BUILTIN_AST_PYTHON_RULES: &[(&str, &str)] = &[
+    (
+        "no-bare-except",
+        include_str!("../../builtin-ratchets/python/ast/no-bare-except.toml"),
+    ),
+    (
+        "no-if-elif-without-else",
+        include_str!("../../builtin-ratchets/python/ast/no-if-elif-without-else.toml"),
+    ),
+    (
+        "no-inline-functions",
+        include_str!("../../builtin-ratchets/python/ast/no-inline-functions.toml"),
+    ),
+    (
+        "no-underscore-imports",
+        include_str!("../../builtin-ratchets/python/ast/no-underscore-imports.toml"),
+    ),
+    (
+        "no-init-in-non-exception-classes",
+        include_str!("../../builtin-ratchets/python/ast/no-init-in-non-exception-classes.toml"),
+    ),
+];
 
 /// Embedded built-in AST rule files for TypeScript
 #[cfg(feature = "lang-typescript")]
@@ -143,18 +161,41 @@ pub fn load_builtin_regex_rules() -> Result<RuleList, RuleError> {
 /// - A rule definition is invalid
 /// - A tree-sitter query is invalid
 pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
+    use crate::rules::RuleContext;
+    use crate::types::GlobPattern;
+    use std::collections::HashMap;
+
     let mut rules = Vec::new();
+
+    // Create a default pattern context for builtin rules
+    let mut patterns = HashMap::new();
+
+    // Define python_tests pattern for Python AST rules
+    #[cfg(feature = "lang-python")]
+    {
+        patterns.insert(
+            "python_tests".to_string(),
+            vec![
+                GlobPattern::new("**/test_*.py".to_string()),
+                GlobPattern::new("**/*_test.py".to_string()),
+                GlobPattern::new("**/tests/**".to_string()),
+            ],
+        );
+    }
+
+    let rule_context = RuleContext { patterns };
 
     // Load Rust AST rules
     #[cfg(feature = "lang-rust")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_RUST_RULES {
-            let rule = AstRule::from_toml(toml_content).map_err(|e| {
-                RuleError::InvalidDefinition(format!(
-                    "Failed to parse built-in Rust AST rule '{}': {}",
-                    rule_name, e
-                ))
-            })?;
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
+                .map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Failed to parse built-in Rust AST rule '{}': {}",
+                        rule_name, e
+                    ))
+                })?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
@@ -165,12 +206,13 @@ pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
     #[cfg(feature = "lang-python")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_PYTHON_RULES {
-            let rule = AstRule::from_toml(toml_content).map_err(|e| {
-                RuleError::InvalidDefinition(format!(
-                    "Failed to parse built-in Python AST rule '{}': {}",
-                    rule_name, e
-                ))
-            })?;
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
+                .map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Failed to parse built-in Python AST rule '{}': {}",
+                        rule_name, e
+                    ))
+                })?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
@@ -181,12 +223,13 @@ pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
     #[cfg(feature = "lang-typescript")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_TYPESCRIPT_RULES {
-            let rule = AstRule::from_toml(toml_content).map_err(|e| {
-                RuleError::InvalidDefinition(format!(
-                    "Failed to parse built-in TypeScript AST rule '{}': {}",
-                    rule_name, e
-                ))
-            })?;
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
+                .map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Failed to parse built-in TypeScript AST rule '{}': {}",
+                        rule_name, e
+                    ))
+                })?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
@@ -261,6 +304,10 @@ mod tests {
         {
             let rule_ids: Vec<&str> = rules.iter().map(|(id, _)| id.as_str()).collect();
             assert!(rule_ids.contains(&"no-bare-except"));
+            assert!(rule_ids.contains(&"no-if-elif-without-else"));
+            assert!(rule_ids.contains(&"no-inline-functions"));
+            assert!(rule_ids.contains(&"no-underscore-imports"));
+            assert!(rule_ids.contains(&"no-init-in-non-exception-classes"));
         }
 
         // Verify TypeScript rules are present when lang-typescript feature is enabled

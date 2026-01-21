@@ -47,6 +47,8 @@ struct MatchSection {
     include: Option<GlobPatternList>,
     #[serde(default)]
     exclude: Option<GlobPatternList>,
+    #[serde(default)]
+    post_filter: Option<String>,
 }
 
 /// A rule that matches AST patterns using tree-sitter queries
@@ -61,6 +63,17 @@ pub struct AstRule {
     language: Language,
     include: Option<GlobSet>,
     exclude: Option<GlobSet>,
+    post_filter: Option<PostFilter>,
+}
+
+/// Post-filter function for additional violation filtering
+///
+/// Some rules require filtering based on captured node text, which tree-sitter
+/// queries cannot express (e.g., negative string matching).
+#[derive(Debug, Clone, Copy)]
+enum PostFilter {
+    /// Filter out classes whose names end with "Exception" or "Error"
+    ClassNameNotException,
 }
 
 impl std::fmt::Debug for AstRule {
@@ -73,6 +86,7 @@ impl std::fmt::Debug for AstRule {
             .field("language", &self.language)
             .field("include", &"<GlobSet>")
             .field("exclude", &"<GlobSet>")
+            .field("post_filter", &self.post_filter)
             .finish()
     }
 }
@@ -141,6 +155,13 @@ impl AstRule {
             None
         };
 
+        // Parse post_filter if specified
+        let post_filter = if let Some(filter_name) = def.match_section.post_filter {
+            Some(parse_post_filter(&filter_name)?)
+        } else {
+            None
+        };
+
         Ok(AstRule {
             id,
             description: def.rule.description,
@@ -149,6 +170,7 @@ impl AstRule {
             language: def.match_section.language,
             include,
             exclude,
+            post_filter,
         })
     }
 
@@ -228,6 +250,13 @@ impl AstRule {
         let mut violations = Vec::new();
 
         for match_result in matches {
+            // Apply post-filter if specified
+            if let Some(filter) = self.post_filter
+                && !apply_post_filter(filter, &query, &match_result, content)
+            {
+                continue;
+            }
+
             // Find the violation capture (or first capture if @violation doesn't exist)
             let capture = if let Some(capture) = match_result
                 .captures
@@ -379,6 +408,51 @@ fn resolve_pattern_reference<'a>(
     ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
         RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
     })
+}
+
+/// Parse a post-filter name into a PostFilter enum
+fn parse_post_filter(filter_name: &str) -> Result<PostFilter, RuleError> {
+    match filter_name {
+        "class_name_not_exception" => Ok(PostFilter::ClassNameNotException),
+        _ => Err(RuleError::InvalidDefinition(format!(
+            "Unknown post_filter: {}",
+            filter_name
+        ))),
+    }
+}
+
+/// Apply a post-filter to a query match
+///
+/// Returns true if the match should be kept as a violation, false if it should be filtered out.
+fn apply_post_filter(
+    filter: PostFilter,
+    query: &Query,
+    match_result: &tree_sitter::QueryMatch,
+    content: &str,
+) -> bool {
+    match filter {
+        PostFilter::ClassNameNotException => {
+            // Find the @class_name capture
+            let class_name_idx = query
+                .capture_names()
+                .iter()
+                .position(|name| *name == "class_name");
+
+            if let Some(idx) = class_name_idx
+                && let Some(capture) = match_result
+                    .captures
+                    .iter()
+                    .find(|c| c.index as usize == idx)
+            {
+                let class_name = &content[capture.node.byte_range()];
+                // Filter out (return false) if class name ends with Exception or Error
+                if class_name.ends_with("Exception") || class_name.ends_with("Error") {
+                    return false;
+                }
+            }
+            true
+        }
+    }
 }
 
 impl Rule for AstRule {
