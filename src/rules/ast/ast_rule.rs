@@ -7,7 +7,7 @@
 
 use crate::error::RuleError;
 use crate::rules::ast::ParserCache;
-use crate::rules::{ExecutionContext, Rule, Violation};
+use crate::rules::{ExecutionContext, Rule, RuleContext, Violation};
 use crate::types::{GlobPattern, Language, RegionPath, RuleId, Severity};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
@@ -17,7 +17,7 @@ use tree_sitter::{Query, QueryCursor, Tree};
 /// TOML structure for AST rule definitions
 ///
 /// This structure is deserialized from TOML files in ratchets/ast/ or
-/// builtin-ratchets/ast/ directories.
+/// builtin-ratchets/{language}/ast/ directories.
 #[derive(Debug, Deserialize)]
 struct AstRuleDefinition {
     rule: RuleSection,
@@ -33,13 +33,22 @@ struct RuleSection {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GlobPatternList {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+#[derive(Debug, Deserialize)]
 struct MatchSection {
     query: String,
     language: Language,
     #[serde(default)]
-    include: Option<Vec<GlobPattern>>,
+    include: Option<GlobPatternList>,
     #[serde(default)]
-    exclude: Option<Vec<GlobPattern>>,
+    exclude: Option<GlobPatternList>,
+    #[serde(default)]
+    post_filter: Option<String>,
 }
 
 /// A rule that matches AST patterns using tree-sitter queries
@@ -54,6 +63,17 @@ pub struct AstRule {
     language: Language,
     include: Option<GlobSet>,
     exclude: Option<GlobSet>,
+    post_filter: Option<PostFilter>,
+}
+
+/// Post-filter function for additional violation filtering
+///
+/// Some rules require filtering based on captured node text, which tree-sitter
+/// queries cannot express (e.g., negative string matching).
+#[derive(Debug, Clone, Copy)]
+enum PostFilter {
+    /// Filter out classes whose names end with "Exception" or "Error"
+    ClassNameNotException,
 }
 
 impl std::fmt::Debug for AstRule {
@@ -66,6 +86,7 @@ impl std::fmt::Debug for AstRule {
             .field("language", &self.language)
             .field("include", &"<GlobSet>")
             .field("exclude", &"<GlobSet>")
+            .field("post_filter", &self.post_filter)
             .finish()
     }
 }
@@ -83,6 +104,28 @@ impl AstRule {
     ///
     /// Returns `RuleError::InvalidQuery` if the tree-sitter query is invalid
     pub fn from_toml(content: &str) -> Result<Self, RuleError> {
+        Self::from_toml_with_context(content, None)
+    }
+
+    /// Parse an AstRule from TOML content with pattern context
+    ///
+    /// This method allows resolving pattern references (e.g., @python_tests) using
+    /// the provided RuleContext.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuleError::InvalidDefinition` if:
+    /// - TOML syntax is invalid
+    /// - Required fields are missing
+    /// - Rule ID is invalid
+    /// - Glob patterns are invalid
+    /// - A pattern reference is not found in the context
+    ///
+    /// Returns `RuleError::InvalidQuery` if the tree-sitter query is invalid
+    pub fn from_toml_with_context(
+        content: &str,
+        ctx: Option<&RuleContext>,
+    ) -> Result<Self, RuleError> {
         // Parse TOML
         let def: AstRuleDefinition = toml::from_str(content)
             .map_err(|e| RuleError::InvalidDefinition(format!("Failed to parse TOML: {}", e)))?;
@@ -100,14 +143,21 @@ impl AstRule {
 
         // Build include GlobSet if specified
         let include = if let Some(patterns) = def.match_section.include {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
         } else {
             None
         };
 
         // Build exclude GlobSet if specified
         let exclude = if let Some(patterns) = def.match_section.exclude {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
+        } else {
+            None
+        };
+
+        // Parse post_filter if specified
+        let post_filter = if let Some(filter_name) = def.match_section.post_filter {
+            Some(parse_post_filter(&filter_name)?)
         } else {
             None
         };
@@ -120,6 +170,7 @@ impl AstRule {
             language: def.match_section.language,
             include,
             exclude,
+            post_filter,
         })
     }
 
@@ -199,6 +250,13 @@ impl AstRule {
         let mut violations = Vec::new();
 
         for match_result in matches {
+            // Apply post-filter if specified
+            if let Some(filter) = self.post_filter
+                && !apply_post_filter(filter, &query, &match_result, content)
+            {
+                continue;
+            }
+
             // Find the violation capture (or first capture if @violation doesn't exist)
             let capture = if let Some(capture) = match_result
                 .captures
@@ -263,24 +321,138 @@ fn validate_query(query_source: &str, language: Language) -> Result<(), RuleErro
     Ok(())
 }
 
-/// Build a GlobSet from a list of glob patterns
-fn build_globset(patterns: &[GlobPattern]) -> Result<GlobSet, RuleError> {
+/// Build a GlobSet from a list of glob patterns or references
+fn build_globset_with_context(
+    pattern_list: &GlobPatternList,
+    ctx: Option<&RuleContext>,
+) -> Result<GlobSet, RuleError> {
     let mut builder = GlobSetBuilder::new();
 
-    for pattern in patterns {
-        let glob = Glob::new(pattern.as_str()).map_err(|e| {
-            RuleError::InvalidDefinition(format!(
-                "Invalid glob pattern '{}': {}",
-                pattern.as_str(),
-                e
-            ))
-        })?;
-        builder.add(glob);
+    match pattern_list {
+        GlobPatternList::Single(s) => {
+            // Check if it's a reference
+            if let Some(ref_name) = s.strip_prefix('@') {
+                // Resolve the reference
+                let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                for pattern in patterns {
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            } else {
+                // It's a literal pattern
+                let pattern = GlobPattern::new(s.clone());
+                let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Invalid glob pattern '{}': {}",
+                        pattern.as_str(),
+                        e
+                    ))
+                })?;
+                builder.add(glob);
+            }
+        }
+        GlobPatternList::Multiple(items) => {
+            for item in items {
+                // Check if it's a reference (starts with @)
+                if let Some(ref_name) = item.strip_prefix('@') {
+                    let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                    for pattern in patterns {
+                        let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                            RuleError::InvalidDefinition(format!(
+                                "Invalid glob pattern '{}': {}",
+                                pattern.as_str(),
+                                e
+                            ))
+                        })?;
+                        builder.add(glob);
+                    }
+                } else {
+                    // It's a literal pattern
+                    let pattern = GlobPattern::new(item.clone());
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            }
+        }
     }
 
     builder
         .build()
         .map_err(|e| RuleError::InvalidDefinition(format!("Failed to build GlobSet: {}", e)))
+}
+
+/// Resolve a pattern reference to its actual patterns
+fn resolve_pattern_reference<'a>(
+    ref_name: &str,
+    ctx: Option<&'a RuleContext>,
+) -> Result<&'a [GlobPattern], RuleError> {
+    let ctx = ctx.ok_or_else(|| {
+        RuleError::InvalidDefinition(format!(
+            "Pattern reference '@{}' cannot be resolved: no pattern context provided",
+            ref_name
+        ))
+    })?;
+
+    ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
+        RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
+    })
+}
+
+/// Parse a post-filter name into a PostFilter enum
+fn parse_post_filter(filter_name: &str) -> Result<PostFilter, RuleError> {
+    match filter_name {
+        "class_name_not_exception" => Ok(PostFilter::ClassNameNotException),
+        _ => Err(RuleError::InvalidDefinition(format!(
+            "Unknown post_filter: {}",
+            filter_name
+        ))),
+    }
+}
+
+/// Apply a post-filter to a query match
+///
+/// Returns true if the match should be kept as a violation, false if it should be filtered out.
+fn apply_post_filter(
+    filter: PostFilter,
+    query: &Query,
+    match_result: &tree_sitter::QueryMatch,
+    content: &str,
+) -> bool {
+    match filter {
+        PostFilter::ClassNameNotException => {
+            // Find the @class_name capture
+            let class_name_idx = query
+                .capture_names()
+                .iter()
+                .position(|name| *name == "class_name");
+
+            if let Some(idx) = class_name_idx
+                && let Some(capture) = match_result
+                    .captures
+                    .iter()
+                    .find(|c| c.index as usize == idx)
+            {
+                let class_name = &content[capture.node.byte_range()];
+                // Filter out (return false) if class name ends with Exception or Error
+                if class_name.ends_with("Exception") || class_name.ends_with("Error") {
+                    return false;
+                }
+            }
+            true
+        }
+    }
 }
 
 impl Rule for AstRule {

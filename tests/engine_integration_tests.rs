@@ -69,7 +69,7 @@ fn test_single_rule_single_file_within_budget() {
 
     // Load rules
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     assert_eq!(registry.len(), 1);
 
     // Execute
@@ -119,7 +119,7 @@ fn test_single_rule_single_file_over_budget() {
 
     // Load and execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(test_file)];
     let result = engine.execute(files);
@@ -172,7 +172,7 @@ fn test_multiple_rules_multiple_files() {
 
     // Load and execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     assert_eq!(registry.len(), 2);
 
     let engine = ExecutionEngine::new(registry);
@@ -242,7 +242,7 @@ fn test_region_specific_budgets() {
 
     // Load and execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(src_file), FileEntry::new(legacy_file)];
     let result = engine.execute(files);
@@ -308,7 +308,7 @@ fn test_empty_file_set() {
 
     // Load and execute with empty file list
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let result = engine.execute(vec![]);
 
@@ -345,7 +345,7 @@ fn test_files_with_no_violations() {
 
     // Load and execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(file1), FileEntry::new(file2)];
     let result = engine.execute(files);
@@ -388,17 +388,17 @@ fn test_parallel_execution_deterministic() {
 
     // Execute multiple times by reloading the registry each time
     let mut registry1 = RuleRegistry::new();
-    registry1.load_custom_regex_rules(&rules_dir).unwrap();
+    registry1.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine1 = ExecutionEngine::new(registry1);
     let result1 = engine1.execute(files.clone());
 
     let mut registry2 = RuleRegistry::new();
-    registry2.load_custom_regex_rules(&rules_dir).unwrap();
+    registry2.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine2 = ExecutionEngine::new(registry2);
     let result2 = engine2.execute(files.clone());
 
     let mut registry3 = RuleRegistry::new();
-    registry3.load_custom_regex_rules(&rules_dir).unwrap();
+    registry3.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine3 = ExecutionEngine::new(registry3);
     let result3 = engine3.execute(files);
 
@@ -443,7 +443,7 @@ fn test_parallel_execution_no_race_conditions() {
 
     // Load and execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let result = engine.execute(files);
 
@@ -503,8 +503,8 @@ query = """
 
     // Load both types of rules
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&regex_dir).unwrap();
-    registry.load_custom_ast_rules(&ast_dir).unwrap();
+    registry.load_custom_regex_rules(&regex_dir, None).unwrap();
+    registry.load_custom_ast_rules(&ast_dir, None).unwrap();
     assert_eq!(registry.len(), 2);
 
     // Execute
@@ -549,7 +549,7 @@ fn test_budget_enforcement_pass() {
 
     // Execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(test_file)];
     let result = engine.execute(files);
@@ -587,7 +587,7 @@ fn test_budget_enforcement_fail() {
 
     // Execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(test_file)];
     let result = engine.execute(files);
@@ -627,7 +627,7 @@ fn test_region_inheritance_chain() {
 
     // Execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![
         FileEntry::new(root_file),
@@ -702,7 +702,7 @@ fn test_aggregation_groups_by_rule_and_region() {
 
     // Execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![
         FileEntry::new(src1),
@@ -816,7 +816,7 @@ languages = ["rust"]
 
     // Execute
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rules_dir).unwrap();
+    registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
     let files = vec![FileEntry::new(test_file)];
     let result = engine.execute(files);
@@ -901,7 +901,7 @@ query = """
 
     // Load all AST rules
     let mut registry = RuleRegistry::new();
-    registry.load_custom_ast_rules(&ast_dir).unwrap();
+    registry.load_custom_ast_rules(&ast_dir, None).unwrap();
     assert_eq!(registry.len(), 3);
 
     // Execute - the engine should parse the AST once and reuse it for all 3 rules

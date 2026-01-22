@@ -117,7 +117,7 @@ fn test_something() {
 
 /// Helper to create builtin regex rule for TODO comments
 fn create_todo_rule(base: &Path) {
-    let builtin_regex = base.join("builtin-ratchets").join("regex");
+    let builtin_regex = base.join("builtin-ratchets").join("common").join("regex");
     fs::create_dir_all(&builtin_regex).unwrap();
 
     fs::write(
@@ -137,7 +137,7 @@ pattern = "TODO"
 
 /// Helper to create builtin regex rule for FIXME comments
 fn create_fixme_rule(base: &Path) {
-    let builtin_regex = base.join("builtin-ratchets").join("regex");
+    let builtin_regex = base.join("builtin-ratchets").join("common").join("regex");
     fs::create_dir_all(&builtin_regex).unwrap();
 
     fs::write(
@@ -157,7 +157,7 @@ pattern = "FIXME"
 
 /// Helper to create builtin AST rule for unwrap
 fn create_unwrap_rule(base: &Path) {
-    let builtin_ast = base.join("builtin-ratchets").join("ast");
+    let builtin_ast = base.join("builtin-ratchets").join("rust").join("ast");
     fs::create_dir_all(&builtin_ast).unwrap();
 
     fs::write(
@@ -170,6 +170,7 @@ severity = "error"
 languages = ["rust"]
 
 [match]
+language = "rust"
 query = """
 (call_expression
   function: (field_expression

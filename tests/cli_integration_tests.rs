@@ -56,7 +56,7 @@ no-todo-comments = true
     fs::write(temp_dir.join("ratchet-counts.toml"), counts).unwrap();
 
     // Create builtin-ratchets/regex directory with no-todo-comments rule
-    let builtin_regex_dir = temp_dir.join("builtin-ratchets").join("regex");
+    let builtin_regex_dir = temp_dir.join("builtin-ratchets").join("common").join("regex");
     fs::create_dir_all(&builtin_regex_dir).unwrap();
 
     let rule_toml = r#"
@@ -785,7 +785,7 @@ no-todo-comments = true
         fs::write(temp_dir.path().join("ratchet-counts.toml"), "").unwrap();
 
         // Create builtin rule
-        let builtin_regex_dir = temp_dir.path().join("builtin-ratchets").join("regex");
+        let builtin_regex_dir = temp_dir.path().join("builtin-ratchets").join("common").join("regex");
         fs::create_dir_all(&builtin_regex_dir).unwrap();
         let rule_toml = r#"
 [rule]
@@ -847,7 +847,7 @@ no-todo-comments = true
         fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
 
         // Create builtin rule
-        let builtin_regex_dir = temp_dir.path().join("builtin-ratchets").join("regex");
+        let builtin_regex_dir = temp_dir.path().join("builtin-ratchets").join("common").join("regex");
         fs::create_dir_all(&builtin_regex_dir).unwrap();
         let rule_toml = r#"
 [rule]

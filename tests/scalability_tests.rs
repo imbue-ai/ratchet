@@ -112,7 +112,7 @@ pattern = "TODO"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rule_dir).unwrap();
+    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
     // Walk files (only include .rs files, exclude .toml)
     use ratchet::types::GlobPattern;
@@ -174,7 +174,7 @@ language = "rust"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_ast_rules(&rule_dir).unwrap();
+    registry.load_custom_ast_rules(&rule_dir, None).unwrap();
 
     // Walk files (only include .rs files)
     use ratchet::types::GlobPattern;
@@ -232,7 +232,7 @@ pattern = "println!"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rule_dir).unwrap();
+    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
     // Walk files and execute (only include .rs files)
     use ratchet::types::GlobPattern;
@@ -277,7 +277,7 @@ pattern = "TODO"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rule_dir).unwrap();
+    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
     // Walk files (only include .rs files)
     use ratchet::types::GlobPattern;
@@ -332,7 +332,7 @@ language = "rust"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_ast_rules(&rule_dir).unwrap();
+    registry.load_custom_ast_rules(&rule_dir, None).unwrap();
 
     // Walk files (only include .rs files)
     use ratchet::types::GlobPattern;
@@ -397,7 +397,7 @@ pattern = "TODO"
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rule_dir).unwrap();
+    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
     // Walk and execute (only include .rs files)
     use ratchet::types::GlobPattern;
@@ -472,7 +472,7 @@ pattern = "fn "
     .unwrap();
 
     let mut registry = RuleRegistry::new();
-    registry.load_custom_regex_rules(&rule_dir).unwrap();
+    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
     // Execute (only include .rs files)
     use ratchet::types::GlobPattern;

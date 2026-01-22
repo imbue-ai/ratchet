@@ -1,0 +1,20 @@
+[rule]
+id = "no-init-in-non-exception-classes"
+description = "Do not define __init__ methods in non-Exception/Error classes. Use Pydantic models instead"
+severity = "warning"
+
+[match]
+language = "python"
+query = """
+(class_definition
+  name: (identifier) @class_name
+  body: (block
+    (function_definition
+      name: (identifier) @method_name
+      (#eq? @method_name "__init__")))) @violation
+"""
+exclude = "@python_tests"
+post_filter = "class_name_not_exception"
+
+# This matches classes with __init__ methods.
+# The post_filter will exclude classes whose names end with "Exception" or "Error".

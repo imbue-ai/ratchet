@@ -10,7 +10,7 @@
 
 use crate::config::ratchet_toml::{RuleValue, RulesConfig};
 use crate::error::RuleError;
-use crate::rules::{AstRule, RegexRule, Rule};
+use crate::rules::{AstRule, RegexRule, Rule, RuleContext};
 use crate::types::RuleId;
 use std::collections::HashMap;
 use std::fs;
@@ -77,7 +77,8 @@ impl RuleRegistry {
     /// - A rule definition is invalid
     /// - There is an I/O error reading a file
     pub fn load_builtin_regex_rules(&mut self, builtin_dir: &Path) -> Result<(), RuleError> {
-        self.load_regex_rules_from_dir(builtin_dir)
+        // Built-in rules don't use pattern references, so we pass None
+        self.load_regex_rules_from_dir(builtin_dir, None)
     }
 
     /// Load custom regex rules from a directory
@@ -89,6 +90,7 @@ impl RuleRegistry {
     /// # Arguments
     ///
     /// * `custom_dir` - Path to the ratchets/regex/ directory
+    /// * `ctx` - Optional pattern context for resolving pattern references
     ///
     /// # Errors
     ///
@@ -96,15 +98,23 @@ impl RuleRegistry {
     /// - A TOML file cannot be parsed
     /// - A rule definition is invalid
     /// - There is an I/O error reading a file
-    pub fn load_custom_regex_rules(&mut self, custom_dir: &Path) -> Result<(), RuleError> {
-        self.load_regex_rules_from_dir(custom_dir)
+    pub fn load_custom_regex_rules(
+        &mut self,
+        custom_dir: &Path,
+        ctx: Option<&RuleContext>,
+    ) -> Result<(), RuleError> {
+        self.load_regex_rules_from_dir(custom_dir, ctx)
     }
 
     /// Internal helper to load regex rules from a directory
     ///
     /// Scans for .toml files and loads them as RegexRules.
     /// If a rule with the same ID already exists, it will be replaced (allowing overrides).
-    fn load_regex_rules_from_dir(&mut self, dir: &Path) -> Result<(), RuleError> {
+    fn load_regex_rules_from_dir(
+        &mut self,
+        dir: &Path,
+        ctx: Option<&RuleContext>,
+    ) -> Result<(), RuleError> {
         // Check if directory exists
         if !dir.exists() {
             // Log warning but don't fail - missing directories are OK
@@ -151,7 +161,10 @@ impl RuleRegistry {
             }
 
             // Load the rule
-            let rule = RegexRule::from_path(&path)?;
+            let content = std::fs::read_to_string(&path).map_err(|e| {
+                RuleError::InvalidDefinition(format!("Failed to read file {:?}: {}", path, e))
+            })?;
+            let rule = RegexRule::from_toml_with_context(&content, ctx)?;
             let rule_id = rule.id().clone();
 
             // Allow overriding existing rules (for filesystem to override embedded)
@@ -203,13 +216,13 @@ impl RuleRegistry {
     /// Load built-in AST rules from a directory
     ///
     /// This method scans the specified directory for language subdirectories
-    /// (e.g., builtin-ratchets/ast/rust/, builtin-ratchets/ast/python/) and
+    /// (e.g., builtin-ratchets/rust/ast/, builtin-ratchets/python/ast/) and
     /// loads all `.toml` files as AstRules. If the directory doesn't exist,
     /// a warning is logged but the operation succeeds.
     ///
     /// # Arguments
     ///
-    /// * `builtin_dir` - Path to the builtin-ratchets/ast/ directory
+    /// * `builtin_dir` - Path to the builtin-ratchets/{language}/ast/ directory
     ///
     /// # Errors
     ///
@@ -236,7 +249,7 @@ impl RuleRegistry {
             )));
         }
 
-        // Read all entries in the directory (these should be language subdirectories)
+        // Read all entries in the directory (these should be language directories like rust/, python/, etc.)
         let entries = fs::read_dir(builtin_dir).map_err(|e| {
             RuleError::InvalidDefinition(format!(
                 "Failed to read directory {}: {}",
@@ -245,7 +258,7 @@ impl RuleRegistry {
             ))
         })?;
 
-        // Process each language subdirectory
+        // Process each language directory
         for entry in entries {
             let entry = entry.map_err(|e| {
                 RuleError::InvalidDefinition(format!(
@@ -255,15 +268,20 @@ impl RuleRegistry {
                 ))
             })?;
 
-            let path = entry.path();
+            let lang_path = entry.path();
 
             // Only process subdirectories
-            if !path.is_dir() {
+            if !lang_path.is_dir() {
                 continue;
             }
 
-            // Load all AST rules from this language subdirectory
-            self.load_ast_rules_from_dir(&path)?;
+            // Look for an ast/ subdirectory within the language directory
+            let ast_path = lang_path.join("ast");
+            if ast_path.exists() && ast_path.is_dir() {
+                // Load all AST rules from this language's ast subdirectory
+                // Built-in rules don't use pattern references
+                self.load_ast_rules_from_dir(&ast_path, None)?;
+            }
         }
 
         Ok(())
@@ -279,6 +297,7 @@ impl RuleRegistry {
     /// # Arguments
     ///
     /// * `custom_dir` - Path to the ratchets/ast/ directory
+    /// * `ctx` - Optional pattern context for resolving pattern references
     ///
     /// # Errors
     ///
@@ -287,15 +306,23 @@ impl RuleRegistry {
     /// - A rule definition is invalid
     /// - A tree-sitter query is invalid
     /// - There is an I/O error reading a file
-    pub fn load_custom_ast_rules(&mut self, custom_dir: &Path) -> Result<(), RuleError> {
-        self.load_ast_rules_from_dir(custom_dir)
+    pub fn load_custom_ast_rules(
+        &mut self,
+        custom_dir: &Path,
+        ctx: Option<&RuleContext>,
+    ) -> Result<(), RuleError> {
+        self.load_ast_rules_from_dir(custom_dir, ctx)
     }
 
     /// Internal helper to load AST rules from a directory
     ///
     /// Scans for .toml files and loads them as AstRules.
     /// If a rule with the same ID already exists, it will be replaced (allowing overrides).
-    fn load_ast_rules_from_dir(&mut self, dir: &Path) -> Result<(), RuleError> {
+    fn load_ast_rules_from_dir(
+        &mut self,
+        dir: &Path,
+        ctx: Option<&RuleContext>,
+    ) -> Result<(), RuleError> {
         // Check if directory exists
         if !dir.exists() {
             // Log warning but don't fail - missing directories are OK
@@ -345,7 +372,10 @@ impl RuleRegistry {
             }
 
             // Load the rule
-            let rule = AstRule::from_path(&path)?;
+            let content = std::fs::read_to_string(&path).map_err(|e| {
+                RuleError::InvalidDefinition(format!("Failed to read file {:?}: {}", path, e))
+            })?;
+            let rule = AstRule::from_toml_with_context(&content, ctx)?;
             let rule_id = rule.id().clone();
 
             // Allow overriding existing rules (for filesystem to override embedded)
@@ -497,7 +527,7 @@ pattern = "TODO"
     #[test]
     fn test_load_custom_regex_rules_missing_dir() {
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_regex_rules(Path::new("/nonexistent/path"));
+        let result = registry.load_custom_regex_rules(Path::new("/nonexistent/path"), None);
         assert!(result.is_ok()); // Should succeed with warning
         assert!(registry.is_empty());
     }
@@ -713,7 +743,7 @@ pattern = "TODO"
         create_test_rule_file(temp_dir.path(), "custom2.toml", "custom-2");
 
         let mut registry = RuleRegistry::new();
-        registry.load_custom_regex_rules(temp_dir.path()).unwrap();
+        registry.load_custom_regex_rules(temp_dir.path(), None).unwrap();
 
         let mut config = RulesConfig::default();
         config
@@ -747,7 +777,7 @@ pattern = "TODO"
         registry
             .load_builtin_regex_rules(builtin_dir.path())
             .unwrap();
-        registry.load_custom_regex_rules(custom_dir.path()).unwrap();
+        registry.load_custom_regex_rules(custom_dir.path(), None).unwrap();
 
         let mut config = RulesConfig::default();
         config.builtin.insert(
@@ -795,7 +825,7 @@ pattern = "TODO"
         registry
             .load_builtin_regex_rules(builtin_dir.path())
             .unwrap();
-        registry.load_custom_regex_rules(custom_dir.path()).unwrap();
+        registry.load_custom_regex_rules(custom_dir.path(), None).unwrap();
 
         assert_eq!(registry.len(), 3);
         assert!(
@@ -908,7 +938,7 @@ query = "(identifier) @violation"
     #[test]
     fn test_load_custom_ast_rules_missing_dir() {
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(Path::new("/nonexistent/ast/path"));
+        let result = registry.load_custom_ast_rules(Path::new("/nonexistent/ast/path"), None);
         assert!(result.is_ok()); // Should succeed with warning
         assert!(registry.is_empty());
     }
@@ -919,7 +949,7 @@ query = "(identifier) @violation"
         create_test_ast_rule_file(temp_dir.path(), "test-ast-rule.toml", "test-ast-rule");
 
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(temp_dir.path());
+        let result = registry.load_custom_ast_rules(temp_dir.path(), None);
         assert!(result.is_ok());
         assert_eq!(registry.len(), 1);
 
@@ -935,7 +965,7 @@ query = "(identifier) @violation"
         create_test_ast_rule_file(temp_dir.path(), "rule3.toml", "ast-rule-3");
 
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(temp_dir.path());
+        let result = registry.load_custom_ast_rules(temp_dir.path(), None);
         assert!(result.is_ok());
         assert_eq!(registry.len(), 3);
 
@@ -960,15 +990,15 @@ query = "(identifier) @violation"
     fn test_load_builtin_ast_rules_per_language() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create language subdirectories
-        let rust_dir = temp_dir.path().join("rust");
-        let python_dir = temp_dir.path().join("python");
-        fs::create_dir(&rust_dir).unwrap();
-        fs::create_dir(&python_dir).unwrap();
+        // Create language subdirectories with ast/ subdirectories
+        let rust_ast_dir = temp_dir.path().join("rust").join("ast");
+        let python_ast_dir = temp_dir.path().join("python").join("ast");
+        fs::create_dir_all(&rust_ast_dir).unwrap();
+        fs::create_dir_all(&python_ast_dir).unwrap();
 
-        // Create rules in each language directory
-        create_test_ast_rule_file(&rust_dir, "rust-rule.toml", "rust-rule");
-        create_test_ast_rule_file(&python_dir, "python-rule.toml", "python-rule");
+        // Create rules in each language's ast directory
+        create_test_ast_rule_file(&rust_ast_dir, "rust-rule.toml", "rust-rule");
+        create_test_ast_rule_file(&python_ast_dir, "python-rule.toml", "python-rule");
 
         let mut registry = RuleRegistry::new();
         let result = registry.load_builtin_ast_rules(temp_dir.path());
@@ -994,16 +1024,16 @@ query = "(identifier) @violation"
         // Create a rule file in the root (should be ignored)
         create_test_ast_rule_file(temp_dir.path(), "root-rule.toml", "root-rule");
 
-        // Create language subdirectory with a rule
-        let rust_dir = temp_dir.path().join("rust");
-        fs::create_dir(&rust_dir).unwrap();
-        create_test_ast_rule_file(&rust_dir, "rust-rule.toml", "rust-rule");
+        // Create language subdirectory with ast/ subdirectory and a rule
+        let rust_ast_dir = temp_dir.path().join("rust").join("ast");
+        fs::create_dir_all(&rust_ast_dir).unwrap();
+        create_test_ast_rule_file(&rust_ast_dir, "rust-rule.toml", "rust-rule");
 
         let mut registry = RuleRegistry::new();
         let result = registry.load_builtin_ast_rules(temp_dir.path());
         assert!(result.is_ok());
 
-        // Should only load from subdirectories, not root files
+        // Should only load from language/ast/ subdirectories, not root files
         assert_eq!(registry.len(), 1);
         assert!(
             registry
@@ -1024,7 +1054,7 @@ query = "(identifier) @violation"
         create_test_ast_rule_file(temp_dir.path(), "rule2.toml", "duplicate-ast-rule");
 
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(temp_dir.path());
+        let result = registry.load_custom_ast_rules(temp_dir.path(), None);
         // Should succeed now - later rules override earlier ones
         assert!(result.is_ok());
         // Should have exactly 1 rule (the second one overrode the first)
@@ -1048,7 +1078,7 @@ query = "(identifier) @violation"
         assert_eq!(registry.len(), 1);
 
         // Load AST rule with same ID - should succeed and override
-        let result = registry.load_custom_ast_rules(ast_dir.path());
+        let result = registry.load_custom_ast_rules(ast_dir.path(), None);
         assert!(result.is_ok());
         // Should still have exactly 1 rule (AST rule overrode regex rule)
         assert_eq!(registry.len(), 1);
@@ -1073,7 +1103,7 @@ query = "(unclosed_paren"
         fs::write(&file_path, toml_content).unwrap();
 
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(temp_dir.path());
+        let result = registry.load_custom_ast_rules(temp_dir.path(), None);
 
         // Should fail due to invalid query
         assert!(result.is_err());
@@ -1092,7 +1122,7 @@ query = "(unclosed_paren"
 
         let mut registry = RuleRegistry::new();
         registry.load_builtin_regex_rules(regex_dir.path()).unwrap();
-        registry.load_custom_ast_rules(ast_dir.path()).unwrap();
+        registry.load_custom_ast_rules(ast_dir.path(), None).unwrap();
 
         assert_eq!(registry.len(), 4);
         assert!(
@@ -1119,7 +1149,7 @@ query = "(unclosed_paren"
         fs::write(temp_dir.path().join("data.json"), "{}").unwrap();
 
         let mut registry = RuleRegistry::new();
-        let result = registry.load_custom_ast_rules(temp_dir.path());
+        let result = registry.load_custom_ast_rules(temp_dir.path(), None);
         assert!(result.is_ok());
         assert_eq!(registry.len(), 1); // Only the .toml file should be loaded
     }
@@ -1138,7 +1168,7 @@ query = "(unclosed_paren"
 
         if builtin_ast_rust_dir.exists() {
             // Load only Rust AST rules to avoid issues with other languages
-            let result = registry.load_custom_ast_rules(&builtin_ast_rust_dir);
+            let result = registry.load_custom_ast_rules(&builtin_ast_rust_dir, None);
             assert!(
                 result.is_ok(),
                 "Failed to load built-in Rust AST rules: {:?}",

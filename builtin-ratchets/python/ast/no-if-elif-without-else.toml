@@ -1,0 +1,16 @@
+[rule]
+id = "no-if-elif-without-else"
+description = "All if/elif chains must have an else clause to ensure all cases are handled explicitly"
+severity = "warning"
+
+[match]
+language = "python"
+query = """
+(if_statement
+  consequence: (_)
+  alternative: (elif_clause) @last_elif) @violation
+"""
+
+# This matches if statements where the alternative is an elif_clause (not else_clause).
+# Tree-sitter will match the last elif in a chain since the alternative field
+# points to the next clause in the chain.

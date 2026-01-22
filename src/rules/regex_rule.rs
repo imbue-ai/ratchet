@@ -6,7 +6,7 @@
 //! using regular expressions.
 
 use crate::error::RuleError;
-use crate::rules::{ExecutionContext, Rule, Violation};
+use crate::rules::{ExecutionContext, Rule, RuleContext, Violation};
 use crate::types::{GlobPattern, Language, RegionPath, RuleId, Severity};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
@@ -32,14 +32,21 @@ struct RuleSection {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GlobPatternList {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+#[derive(Debug, Deserialize)]
 struct MatchSection {
     pattern: String,
     #[serde(default)]
     languages: Option<Vec<Language>>,
     #[serde(default)]
-    include: Option<Vec<GlobPattern>>,
+    include: Option<GlobPatternList>,
     #[serde(default)]
-    exclude: Option<Vec<GlobPattern>>,
+    exclude: Option<GlobPatternList>,
 }
 
 /// A rule that matches text patterns using regular expressions
@@ -82,6 +89,27 @@ impl RegexRule {
     /// - Regex pattern is invalid
     /// - Glob patterns are invalid
     pub fn from_toml(content: &str) -> Result<Self, RuleError> {
+        Self::from_toml_with_context(content, None)
+    }
+
+    /// Parse a RegexRule from TOML content with pattern context
+    ///
+    /// This method allows resolving pattern references (e.g., @python_tests) using
+    /// the provided RuleContext.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuleError::InvalidDefinition` if:
+    /// - TOML syntax is invalid
+    /// - Required fields are missing
+    /// - Rule ID is invalid
+    /// - Regex pattern is invalid
+    /// - Glob patterns are invalid
+    /// - A pattern reference is not found in the context
+    pub fn from_toml_with_context(
+        content: &str,
+        ctx: Option<&RuleContext>,
+    ) -> Result<Self, RuleError> {
         // Parse TOML
         let def: RegexRuleDefinition = toml::from_str(content)
             .map_err(|e| RuleError::InvalidDefinition(format!("Failed to parse TOML: {}", e)))?;
@@ -104,14 +132,14 @@ impl RegexRule {
 
         // Build include GlobSet if specified
         let include = if let Some(patterns) = def.match_section.include {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
         } else {
             None
         };
 
         // Build exclude GlobSet if specified
         let exclude = if let Some(patterns) = def.match_section.exclude {
-            Some(build_globset(&patterns)?)
+            Some(build_globset_with_context(&patterns, ctx)?)
         } else {
             None
         };
@@ -158,24 +186,93 @@ impl RegexRule {
     }
 }
 
-/// Build a GlobSet from a list of glob patterns
-fn build_globset(patterns: &[GlobPattern]) -> Result<GlobSet, RuleError> {
+/// Build a GlobSet from a list of glob patterns or references
+fn build_globset_with_context(
+    pattern_list: &GlobPatternList,
+    ctx: Option<&RuleContext>,
+) -> Result<GlobSet, RuleError> {
     let mut builder = GlobSetBuilder::new();
 
-    for pattern in patterns {
-        let glob = Glob::new(pattern.as_str()).map_err(|e| {
-            RuleError::InvalidDefinition(format!(
-                "Invalid glob pattern '{}': {}",
-                pattern.as_str(),
-                e
-            ))
-        })?;
-        builder.add(glob);
+    match pattern_list {
+        GlobPatternList::Single(s) => {
+            // Check if it's a reference
+            if let Some(ref_name) = s.strip_prefix('@') {
+                // Resolve the reference
+                let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                for pattern in patterns {
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            } else {
+                // It's a literal pattern
+                let pattern = GlobPattern::new(s.clone());
+                let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                    RuleError::InvalidDefinition(format!(
+                        "Invalid glob pattern '{}': {}",
+                        pattern.as_str(),
+                        e
+                    ))
+                })?;
+                builder.add(glob);
+            }
+        }
+        GlobPatternList::Multiple(items) => {
+            for item in items {
+                // Check if it's a reference (starts with @)
+                if let Some(ref_name) = item.strip_prefix('@') {
+                    let patterns = resolve_pattern_reference(ref_name, ctx)?;
+                    for pattern in patterns {
+                        let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                            RuleError::InvalidDefinition(format!(
+                                "Invalid glob pattern '{}': {}",
+                                pattern.as_str(),
+                                e
+                            ))
+                        })?;
+                        builder.add(glob);
+                    }
+                } else {
+                    // It's a literal pattern
+                    let pattern = GlobPattern::new(item.clone());
+                    let glob = Glob::new(pattern.as_str()).map_err(|e| {
+                        RuleError::InvalidDefinition(format!(
+                            "Invalid glob pattern '{}': {}",
+                            pattern.as_str(),
+                            e
+                        ))
+                    })?;
+                    builder.add(glob);
+                }
+            }
+        }
     }
 
     builder
         .build()
         .map_err(|e| RuleError::InvalidDefinition(format!("Failed to build GlobSet: {}", e)))
+}
+
+/// Resolve a pattern reference to its actual patterns
+fn resolve_pattern_reference<'a>(
+    ref_name: &str,
+    ctx: Option<&'a RuleContext>,
+) -> Result<&'a [GlobPattern], RuleError> {
+    let ctx = ctx.ok_or_else(|| {
+        RuleError::InvalidDefinition(format!(
+            "Pattern reference '@{}' cannot be resolved: no pattern context provided",
+            ref_name
+        ))
+    })?;
+
+    ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
+        RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
+    })
 }
 
 /// Compute line start offsets for efficient line/column conversion
@@ -621,5 +718,170 @@ pattern = "FIXME"
         assert_eq!(violations.len(), 2);
         assert_eq!(violations[0].line, 3);
         assert_eq!(violations[1].line, 5);
+    }
+
+    #[test]
+    fn test_pattern_reference_single() {
+        use crate::rules::RuleContext;
+        use crate::types::GlobPattern;
+        use std::collections::HashMap;
+
+        let toml = r#"
+[rule]
+id = "test-rule"
+description = "Test with pattern reference"
+severity = "error"
+
+[match]
+pattern = "TODO"
+exclude = "@test_files"
+"#;
+
+        // Create a context with test_files pattern
+        let mut patterns = HashMap::new();
+        patterns.insert(
+            "test_files".to_string(),
+            vec![
+                GlobPattern::new("**/test_*.py"),
+                GlobPattern::new("**/*_test.py"),
+            ],
+        );
+        let ctx = RuleContext::new(patterns);
+
+        let rule = RegexRule::from_toml_with_context(toml, Some(&ctx)).unwrap();
+
+        // File matching the pattern reference should be excluded
+        let ctx_test = ExecutionContext {
+            file_path: Path::new("test_foo.py"),
+            content: "// TODO: fix this",
+            ast: None,
+        };
+        let violations = rule.execute(&ctx_test);
+        assert_eq!(violations.len(), 0);
+
+        // File not matching should be included
+        let ctx_normal = ExecutionContext {
+            file_path: Path::new("main.py"),
+            content: "// TODO: fix this",
+            ast: None,
+        };
+        let violations = rule.execute(&ctx_normal);
+        assert_eq!(violations.len(), 1);
+    }
+
+    #[test]
+    fn test_pattern_reference_mixed() {
+        use crate::rules::RuleContext;
+        use crate::types::GlobPattern;
+        use std::collections::HashMap;
+
+        let toml = r#"
+[rule]
+id = "test-rule"
+description = "Test with mixed patterns"
+severity = "error"
+
+[match]
+pattern = "TODO"
+exclude = ["@test_files", "build/**"]
+"#;
+
+        let mut patterns = HashMap::new();
+        patterns.insert(
+            "test_files".to_string(),
+            vec![GlobPattern::new("**/test_*.py")],
+        );
+        let ctx = RuleContext::new(patterns);
+
+        let rule = RegexRule::from_toml_with_context(toml, Some(&ctx)).unwrap();
+
+        // Test reference match
+        let ctx1 = ExecutionContext {
+            file_path: Path::new("test_foo.py"),
+            content: "// TODO: fix this",
+            ast: None,
+        };
+        assert_eq!(rule.execute(&ctx1).len(), 0);
+
+        // Test literal match
+        let ctx2 = ExecutionContext {
+            file_path: Path::new("build/main.py"),
+            content: "// TODO: fix this",
+            ast: None,
+        };
+        assert_eq!(rule.execute(&ctx2).len(), 0);
+
+        // Test non-match
+        let ctx3 = ExecutionContext {
+            file_path: Path::new("src/main.py"),
+            content: "// TODO: fix this",
+            ast: None,
+        };
+        assert_eq!(rule.execute(&ctx3).len(), 1);
+    }
+
+    #[test]
+    fn test_pattern_reference_not_found() {
+        use crate::rules::RuleContext;
+
+        let toml = r#"
+[rule]
+id = "test-rule"
+description = "Test with unknown pattern"
+severity = "error"
+
+[match]
+pattern = "TODO"
+exclude = "@unknown_pattern"
+"#;
+
+        let ctx = RuleContext::empty();
+        let result = RegexRule::from_toml_with_context(toml, Some(&ctx));
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown pattern reference"));
+    }
+
+    #[test]
+    fn test_pattern_reference_no_context() {
+        let toml = r#"
+[rule]
+id = "test-rule"
+description = "Test with pattern reference but no context"
+severity = "error"
+
+[match]
+pattern = "TODO"
+exclude = "@test_files"
+"#;
+
+        let result = RegexRule::from_toml_with_context(toml, None);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no pattern context provided"));
+    }
+
+    #[test]
+    fn test_backward_compatibility() {
+        // Regular patterns should work without context
+        let toml = r#"
+[rule]
+id = "test-rule"
+description = "Test backward compatibility"
+severity = "error"
+
+[match]
+pattern = "TODO"
+exclude = ["**/tests/**"]
+"#;
+
+        let result = RegexRule::from_toml(toml);
+        assert!(result.is_ok());
     }
 }

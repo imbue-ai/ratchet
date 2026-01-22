@@ -16,7 +16,7 @@ use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
 use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
-use crate::rules::RuleRegistry;
+use crate::rules::{RuleContext, RuleRegistry};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -97,7 +97,7 @@ fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, Check
     let counts = load_counts()?;
 
     // 3. Build rule registry (load builtin + custom rules)
-    let mut registry = build_rule_registry()?;
+    let mut registry = build_rule_registry(&config)?;
 
     // 4. Filter rules by config
     registry.filter_by_config(&config.rules);
@@ -170,35 +170,38 @@ pub(crate) fn load_counts() -> Result<CountsManager, CheckError> {
 }
 
 /// Build rule registry with all builtin and custom rules
-pub(crate) fn build_rule_registry() -> Result<RuleRegistry, CheckError> {
+pub(crate) fn build_rule_registry(config: &Config) -> Result<RuleRegistry, CheckError> {
     let mut registry = RuleRegistry::new();
+
+    // Create RuleContext from config patterns
+    let rule_context = RuleContext::new(config.patterns.clone());
 
     // Load embedded builtin rules first (always available)
     registry.load_embedded_builtin_regex_rules()?;
     registry.load_embedded_builtin_ast_rules()?;
 
-    // Load builtin regex rules from builtin-ratchets/regex/ (for overrides or development)
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("regex");
+    // Load builtin regex rules from builtin-ratchets/common/regex/ (for overrides or development)
+    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
     if builtin_regex_dir.exists() {
         registry.load_builtin_regex_rules(&builtin_regex_dir)?;
     }
 
-    // Load builtin AST rules from builtin-ratchets/ast/ (for overrides or development)
-    let builtin_ast_dir = PathBuf::from("builtin-ratchets").join("ast");
-    if builtin_ast_dir.exists() {
-        registry.load_builtin_ast_rules(&builtin_ast_dir)?;
+    // Load builtin AST rules from builtin-ratchets/{language}/ast/ (for overrides or development)
+    let builtin_ratchets_dir = PathBuf::from("builtin-ratchets");
+    if builtin_ratchets_dir.exists() {
+        registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
     }
 
     // Load custom regex rules from ratchets/regex/
     let custom_regex_dir = PathBuf::from("ratchets").join("regex");
     if custom_regex_dir.exists() {
-        registry.load_custom_regex_rules(&custom_regex_dir)?;
+        registry.load_custom_regex_rules(&custom_regex_dir, Some(&rule_context))?;
     }
 
     // Load custom AST rules from ratchets/ast/
     let custom_ast_dir = PathBuf::from("ratchets").join("ast");
     if custom_ast_dir.exists() {
-        registry.load_custom_ast_rules(&custom_ast_dir)?;
+        registry.load_custom_ast_rules(&custom_ast_dir, Some(&rule_context))?;
     }
 
     Ok(registry)
