@@ -12,7 +12,7 @@ Ratchet is a progressive lint enforcement tool that allows codebases to contain 
 
 ## Installation
 
-### Quick Install (Recommended)
+### Install from Github
 
 Install from source using the installation script:
 
@@ -21,12 +21,6 @@ curl -sSf https://raw.githubusercontent.com/imbue-ai/ratchet/main/install.sh | s
 ```
 
 This will automatically build and install ratchet to `~/.cargo/bin/`. Requires Rust/Cargo to be installed.
-
-### From Crates.io
-
-```bash
-cargo install ratchet
-```
 
 ## Quick Start
 
