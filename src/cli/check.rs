@@ -181,7 +181,9 @@ pub(crate) fn build_rule_registry(config: &Config) -> Result<RuleRegistry, Check
     registry.load_embedded_builtin_ast_rules()?;
 
     // Load builtin regex rules from builtin-ratchets/common/regex/ (for overrides or development)
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
+    let builtin_regex_dir = PathBuf::from("builtin-ratchets")
+        .join("common")
+        .join("regex");
     if builtin_regex_dir.exists() {
         registry.load_builtin_regex_rules(&builtin_regex_dir)?;
     }

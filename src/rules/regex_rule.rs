@@ -270,9 +270,12 @@ fn resolve_pattern_reference<'a>(
         ))
     })?;
 
-    ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
-        RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
-    })
+    ctx.patterns
+        .get(ref_name)
+        .map(|v| v.as_slice())
+        .ok_or_else(|| {
+            RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
+        })
 }
 
 /// Compute line start offsets for efficient line/column conversion
@@ -839,10 +842,12 @@ exclude = "@unknown_pattern"
         let result = RegexRule::from_toml_with_context(toml, Some(&ctx));
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unknown pattern reference"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown pattern reference")
+        );
     }
 
     #[test]
@@ -861,10 +866,12 @@ exclude = "@test_files"
         let result = RegexRule::from_toml_with_context(toml, None);
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no pattern context provided"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no pattern context provided")
+        );
     }
 
     #[test]

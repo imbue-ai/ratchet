@@ -217,7 +217,9 @@ fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, Tight
     let rule_context = RuleContext::new(config.patterns.clone());
 
     // Load builtin regex rules
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets").join("common").join("regex");
+    let builtin_regex_dir = PathBuf::from("builtin-ratchets")
+        .join("common")
+        .join("regex");
     if builtin_regex_dir.exists() {
         registry.load_builtin_regex_rules(&builtin_regex_dir)?;
     }

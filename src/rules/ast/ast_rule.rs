@@ -405,9 +405,12 @@ fn resolve_pattern_reference<'a>(
         ))
     })?;
 
-    ctx.patterns.get(ref_name).map(|v| v.as_slice()).ok_or_else(|| {
-        RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
-    })
+    ctx.patterns
+        .get(ref_name)
+        .map(|v| v.as_slice())
+        .ok_or_else(|| {
+            RuleError::InvalidDefinition(format!("Unknown pattern reference: @{}", ref_name))
+        })
 }
 
 /// Parse a post-filter name into a PostFilter enum

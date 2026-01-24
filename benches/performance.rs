@@ -352,7 +352,7 @@ pattern = "TODO"
                 b.iter(|| {
                     // Create registry for each iteration (cheap compared to file operations)
                     let mut registry = RuleRegistry::new();
-                    registry.load_custom_regex_rules(&rule_dir).unwrap();
+                    registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
                     let walker = FileWalker::new(temp_dir.path(), &[], &[]).unwrap();
                     let files: Vec<FileEntry> = walker.walk().filter_map(Result::ok).collect();
@@ -402,7 +402,7 @@ pattern = "TODO"
         b.iter(|| {
             // Create registry for each iteration
             let mut registry = RuleRegistry::new();
-            registry.load_custom_regex_rules(&rule_dir).unwrap();
+            registry.load_custom_regex_rules(&rule_dir, None).unwrap();
 
             let engine = ratchet::engine::executor::ExecutionEngine::new(registry);
             let result = engine.execute(files.clone());

@@ -516,7 +516,7 @@ mod tests {
         let formatter = JsonlFormatter::new();
 
         // Test with spaces, unicode, and special characters in paths
-        let violations = vec![
+        let violations = [
             create_test_violation(
                 "no-unwrap",
                 "src/my file.rs",
@@ -659,7 +659,7 @@ mod tests {
         let formatter = JsonlFormatter::new();
 
         // Create a complex result with multiple violations
-        let violations1 = vec![
+        let violations1 = [
             create_test_violation("rule-b", "src/z.rs", "src", 20, 5, "snippet2", "message2"),
             create_test_violation("rule-a", "src/a.rs", "src", 10, 5, "snippet1", "message1"),
         ];

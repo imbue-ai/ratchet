@@ -11,7 +11,7 @@
 use crate::config::ratchet_toml::{RuleValue, RulesConfig};
 use crate::error::RuleError;
 use crate::rules::{AstRule, RegexRule, Rule, RuleContext};
-use crate::types::RuleId;
+use crate::types::{GlobPattern, RuleId};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -249,6 +249,24 @@ impl RuleRegistry {
             )));
         }
 
+        // Create a default pattern context for builtin rules
+        let mut patterns = HashMap::new();
+
+        // Define python_tests pattern for Python AST rules
+        #[cfg(feature = "lang-python")]
+        {
+            patterns.insert(
+                "python_tests".to_string(),
+                vec![
+                    GlobPattern::new("**/test_*.py".to_string()),
+                    GlobPattern::new("**/*_test.py".to_string()),
+                    GlobPattern::new("**/tests/**".to_string()),
+                ],
+            );
+        }
+
+        let rule_context = RuleContext { patterns };
+
         // Read all entries in the directory (these should be language directories like rust/, python/, etc.)
         let entries = fs::read_dir(builtin_dir).map_err(|e| {
             RuleError::InvalidDefinition(format!(
@@ -279,8 +297,7 @@ impl RuleRegistry {
             let ast_path = lang_path.join("ast");
             if ast_path.exists() && ast_path.is_dir() {
                 // Load all AST rules from this language's ast subdirectory
-                // Built-in rules don't use pattern references
-                self.load_ast_rules_from_dir(&ast_path, None)?;
+                self.load_ast_rules_from_dir(&ast_path, Some(&rule_context))?;
             }
         }
 
@@ -743,7 +760,9 @@ pattern = "TODO"
         create_test_rule_file(temp_dir.path(), "custom2.toml", "custom-2");
 
         let mut registry = RuleRegistry::new();
-        registry.load_custom_regex_rules(temp_dir.path(), None).unwrap();
+        registry
+            .load_custom_regex_rules(temp_dir.path(), None)
+            .unwrap();
 
         let mut config = RulesConfig::default();
         config
@@ -777,7 +796,9 @@ pattern = "TODO"
         registry
             .load_builtin_regex_rules(builtin_dir.path())
             .unwrap();
-        registry.load_custom_regex_rules(custom_dir.path(), None).unwrap();
+        registry
+            .load_custom_regex_rules(custom_dir.path(), None)
+            .unwrap();
 
         let mut config = RulesConfig::default();
         config.builtin.insert(
@@ -825,7 +846,9 @@ pattern = "TODO"
         registry
             .load_builtin_regex_rules(builtin_dir.path())
             .unwrap();
-        registry.load_custom_regex_rules(custom_dir.path(), None).unwrap();
+        registry
+            .load_custom_regex_rules(custom_dir.path(), None)
+            .unwrap();
 
         assert_eq!(registry.len(), 3);
         assert!(
@@ -1122,7 +1145,9 @@ query = "(unclosed_paren"
 
         let mut registry = RuleRegistry::new();
         registry.load_builtin_regex_rules(regex_dir.path()).unwrap();
-        registry.load_custom_ast_rules(ast_dir.path(), None).unwrap();
+        registry
+            .load_custom_ast_rules(ast_dir.path(), None)
+            .unwrap();
 
         assert_eq!(registry.len(), 4);
         assert!(

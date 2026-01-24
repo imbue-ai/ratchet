@@ -643,7 +643,7 @@ mod tests {
         let formatter = HumanFormatter::new(ColorChoice::Never);
 
         // Create the same result multiple times and verify output is identical
-        let violations = vec![
+        let violations = [
             create_test_violation("no-unwrap", "src/main.rs", "src", 10, ".unwrap()"),
             create_test_violation("no-todo", "src/lib.rs", "src", 20, "// TODO: fix"),
         ];

@@ -28,33 +28,114 @@ const BUILTIN_REGEX_RULES: &[(&str, &str)] = &[
 /// Embedded built-in regex rule files for Python
 #[cfg(feature = "lang-python")]
 const BUILTIN_PYTHON_REGEX_RULES: &[(&str, &str)] = &[
-    ("no-exec-usage", include_str!("../../builtin-ratchets/python/regex/no-exec-usage.toml")),
-    ("no-eval-usage", include_str!("../../builtin-ratchets/python/regex/no-eval-usage.toml")),
-    ("no-broad-exception", include_str!("../../builtin-ratchets/python/regex/no-broad-exception.toml")),
-    ("no-base-exception", include_str!("../../builtin-ratchets/python/regex/no-base-exception.toml")),
-    ("no-inline-imports", include_str!("../../builtin-ratchets/python/regex/no-inline-imports.toml")),
-    ("no-relative-imports", include_str!("../../builtin-ratchets/python/regex/no-relative-imports.toml")),
-    ("no-import-datetime", include_str!("../../builtin-ratchets/python/regex/no-import-datetime.toml")),
-    ("no-asyncio-import", include_str!("../../builtin-ratchets/python/regex/no-asyncio-import.toml")),
-    ("no-pandas-import", include_str!("../../builtin-ratchets/python/regex/no-pandas-import.toml")),
-    ("no-dataclasses-import", include_str!("../../builtin-ratchets/python/regex/no-dataclasses-import.toml")),
-    ("no-yaml-usage", include_str!("../../builtin-ratchets/python/regex/no-yaml-usage.toml")),
-    ("no-while-true", include_str!("../../builtin-ratchets/python/regex/no-while-true.toml")),
-    ("no-namedtuple-usage", include_str!("../../builtin-ratchets/python/regex/no-namedtuple-usage.toml")),
-    ("no-global-keyword", include_str!("../../builtin-ratchets/python/regex/no-global-keyword.toml")),
-    ("no-time-sleep", include_str!("../../builtin-ratchets/python/regex/no-time-sleep.toml")),
-    ("no-bare-print", include_str!("../../builtin-ratchets/python/regex/no-bare-print.toml")),
-    ("no-click-echo", include_str!("../../builtin-ratchets/python/regex/no-click-echo.toml")),
-    ("no-bare-generic-types", include_str!("../../builtin-ratchets/python/regex/no-bare-generic-types.toml")),
-    ("no-typing-builtin-imports", include_str!("../../builtin-ratchets/python/regex/no-typing-builtin-imports.toml")),
-    ("no-literal-multi-options", include_str!("../../builtin-ratchets/python/regex/no-literal-multi-options.toml")),
-    ("no-init-docstrings", include_str!("../../builtin-ratchets/python/regex/no-init-docstrings.toml")),
-    ("no-args-in-docstrings", include_str!("../../builtin-ratchets/python/regex/no-args-in-docstrings.toml")),
-    ("no-returns-in-docstrings", include_str!("../../builtin-ratchets/python/regex/no-returns-in-docstrings.toml")),
-    ("no-trailing-comments", include_str!("../../builtin-ratchets/python/regex/no-trailing-comments.toml")),
-    ("no-num-prefix", include_str!("../../builtin-ratchets/python/regex/no-num-prefix.toml")),
-    ("no-builtin-exception-raises", include_str!("../../builtin-ratchets/python/regex/no-builtin-exception-raises.toml")),
-    ("no-fstring-logging", include_str!("../../builtin-ratchets/python/regex/no-fstring-logging.toml")),
+    (
+        "no-exec-usage",
+        include_str!("../../builtin-ratchets/python/regex/no-exec-usage.toml"),
+    ),
+    (
+        "no-eval-usage",
+        include_str!("../../builtin-ratchets/python/regex/no-eval-usage.toml"),
+    ),
+    (
+        "no-broad-exception",
+        include_str!("../../builtin-ratchets/python/regex/no-broad-exception.toml"),
+    ),
+    (
+        "no-base-exception",
+        include_str!("../../builtin-ratchets/python/regex/no-base-exception.toml"),
+    ),
+    (
+        "no-inline-imports",
+        include_str!("../../builtin-ratchets/python/regex/no-inline-imports.toml"),
+    ),
+    (
+        "no-relative-imports",
+        include_str!("../../builtin-ratchets/python/regex/no-relative-imports.toml"),
+    ),
+    (
+        "no-import-datetime",
+        include_str!("../../builtin-ratchets/python/regex/no-import-datetime.toml"),
+    ),
+    (
+        "no-asyncio-import",
+        include_str!("../../builtin-ratchets/python/regex/no-asyncio-import.toml"),
+    ),
+    (
+        "no-pandas-import",
+        include_str!("../../builtin-ratchets/python/regex/no-pandas-import.toml"),
+    ),
+    (
+        "no-dataclasses-import",
+        include_str!("../../builtin-ratchets/python/regex/no-dataclasses-import.toml"),
+    ),
+    (
+        "no-yaml-usage",
+        include_str!("../../builtin-ratchets/python/regex/no-yaml-usage.toml"),
+    ),
+    (
+        "no-while-true",
+        include_str!("../../builtin-ratchets/python/regex/no-while-true.toml"),
+    ),
+    (
+        "no-namedtuple-usage",
+        include_str!("../../builtin-ratchets/python/regex/no-namedtuple-usage.toml"),
+    ),
+    (
+        "no-global-keyword",
+        include_str!("../../builtin-ratchets/python/regex/no-global-keyword.toml"),
+    ),
+    (
+        "no-time-sleep",
+        include_str!("../../builtin-ratchets/python/regex/no-time-sleep.toml"),
+    ),
+    (
+        "no-bare-print",
+        include_str!("../../builtin-ratchets/python/regex/no-bare-print.toml"),
+    ),
+    (
+        "no-click-echo",
+        include_str!("../../builtin-ratchets/python/regex/no-click-echo.toml"),
+    ),
+    (
+        "no-bare-generic-types",
+        include_str!("../../builtin-ratchets/python/regex/no-bare-generic-types.toml"),
+    ),
+    (
+        "no-typing-builtin-imports",
+        include_str!("../../builtin-ratchets/python/regex/no-typing-builtin-imports.toml"),
+    ),
+    (
+        "no-literal-multi-options",
+        include_str!("../../builtin-ratchets/python/regex/no-literal-multi-options.toml"),
+    ),
+    (
+        "no-init-docstrings",
+        include_str!("../../builtin-ratchets/python/regex/no-init-docstrings.toml"),
+    ),
+    (
+        "no-args-in-docstrings",
+        include_str!("../../builtin-ratchets/python/regex/no-args-in-docstrings.toml"),
+    ),
+    (
+        "no-returns-in-docstrings",
+        include_str!("../../builtin-ratchets/python/regex/no-returns-in-docstrings.toml"),
+    ),
+    (
+        "no-trailing-comments",
+        include_str!("../../builtin-ratchets/python/regex/no-trailing-comments.toml"),
+    ),
+    (
+        "no-num-prefix",
+        include_str!("../../builtin-ratchets/python/regex/no-num-prefix.toml"),
+    ),
+    (
+        "no-builtin-exception-raises",
+        include_str!("../../builtin-ratchets/python/regex/no-builtin-exception-raises.toml"),
+    ),
+    (
+        "no-fstring-logging",
+        include_str!("../../builtin-ratchets/python/regex/no-fstring-logging.toml"),
+    ),
 ];
 
 /// Embedded built-in AST rule files for Rust
@@ -189,13 +270,14 @@ pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
     #[cfg(feature = "lang-rust")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_RUST_RULES {
-            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
-                .map_err(|e| {
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context)).map_err(
+                |e| {
                     RuleError::InvalidDefinition(format!(
                         "Failed to parse built-in Rust AST rule '{}': {}",
                         rule_name, e
                     ))
-                })?;
+                },
+            )?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
@@ -206,13 +288,14 @@ pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
     #[cfg(feature = "lang-python")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_PYTHON_RULES {
-            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
-                .map_err(|e| {
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context)).map_err(
+                |e| {
                     RuleError::InvalidDefinition(format!(
                         "Failed to parse built-in Python AST rule '{}': {}",
                         rule_name, e
                     ))
-                })?;
+                },
+            )?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
@@ -223,13 +306,14 @@ pub fn load_builtin_ast_rules() -> Result<RuleList, RuleError> {
     #[cfg(feature = "lang-typescript")]
     {
         for (rule_name, toml_content) in BUILTIN_AST_TYPESCRIPT_RULES {
-            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context))
-                .map_err(|e| {
+            let rule = AstRule::from_toml_with_context(toml_content, Some(&rule_context)).map_err(
+                |e| {
                     RuleError::InvalidDefinition(format!(
                         "Failed to parse built-in TypeScript AST rule '{}': {}",
                         rule_name, e
                     ))
-                })?;
+                },
+            )?;
 
             let rule_id = rule.id().clone();
             rules.push((rule_id, Box::new(rule) as Box<dyn Rule>));
