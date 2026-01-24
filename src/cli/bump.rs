@@ -11,7 +11,6 @@ use crate::config::counts::CountsManager;
 use crate::config::ratchet_toml::Config;
 use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
-use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
 use crate::rules::RuleRegistry;
 use crate::types::{RegionPath, RuleId};
@@ -76,8 +75,8 @@ fn run_bump_inner(rule_id: &str, region: &str, count: Option<u64>) -> Result<(),
     })?;
 
     // 2. Load configuration and verify rule exists
-    let config = load_config()?;
-    let registry = build_and_filter_rule_registry(&config)?;
+    let config = super::common::load_config().map_err(BumpError::Config)?;
+    let registry = super::common::build_registry(&config)?;
 
     // Verify the rule exists in the registry
     if registry.get_rule(&rule_id).is_none() {
@@ -151,28 +150,6 @@ fn run_bump_inner(rule_id: &str, region: &str, count: Option<u64>) -> Result<(),
     Ok(())
 }
 
-/// Load ratchet.toml configuration
-fn load_config() -> Result<Config, BumpError> {
-    let config_path = Path::new("ratchet.toml");
-    if !config_path.exists() {
-        return Err(BumpError::Other(
-            "ratchet.toml not found. Run 'ratchet init' to create it.".to_string(),
-        ));
-    }
-
-    Ok(Config::load(config_path)?)
-}
-
-/// Build and filter rule registry
-fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, BumpError> {
-    // Use the centralized build_from_config method which loads:
-    // 1. Embedded builtin rules
-    // 2. Filesystem builtin rules (if present)
-    // 3. Custom rules (if present)
-    // 4. Filters by config
-    Ok(RuleRegistry::build_from_config(config)?)
-}
-
 /// Get current violation count by running check for a specific rule/region
 fn get_current_violation_count(
     rule_id: &RuleId,
@@ -193,7 +170,7 @@ fn get_current_violation_count(
     counts.set_count(rule_id, &region_path, u64::MAX);
 
     // Build a filtered registry with only the target rule
-    let full_registry = build_and_filter_rule_registry(config)?;
+    let full_registry = super::common::build_registry(config)?;
     let mut single_rule_registry = RuleRegistry::new();
 
     // Copy only the target rule to the single rule registry
@@ -221,11 +198,11 @@ fn get_current_violation_count(
         }
 
         // Rebuild registry with the filtered config
-        single_rule_registry = RuleRegistry::build_from_config(&filtered_config)?;
+        single_rule_registry = super::common::build_registry(&filtered_config)?;
     }
 
     // Discover files in the region
-    let files = discover_files(&[region.to_string()], config)?;
+    let files = super::common::discover_files(&[region.to_string()], config)?;
 
     // Run execution engine with the single rule
     let engine = ExecutionEngine::new(single_rule_registry);
@@ -246,29 +223,6 @@ fn get_current_violation_count(
         Some(s) => Ok(s.actual_count),
         None => Ok(0), // No violations found
     }
-}
-
-/// Discover files using FileWalker
-fn discover_files(
-    paths: &[String],
-    config: &Config,
-) -> Result<Vec<crate::engine::file_walker::FileEntry>, BumpError> {
-    let mut all_files = Vec::new();
-
-    for path_str in paths {
-        let path = Path::new(path_str);
-
-        // Create FileWalker with include/exclude patterns from config
-        let walker = FileWalker::new(path, &config.ratchet.include, &config.ratchet.exclude)?;
-
-        // Collect files from this path
-        for result in walker.walk() {
-            let file = result?;
-            all_files.push(file);
-        }
-    }
-
-    Ok(all_files)
 }
 
 /// Get the budget for a specific region from the CountsManager

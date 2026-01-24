@@ -11,9 +11,7 @@ use crate::config::counts::CountsManager;
 use crate::config::ratchet_toml::Config;
 use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
-use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
-use crate::rules::RuleRegistry;
 use crate::types::{RegionPath, RuleId};
 use std::path::Path;
 
@@ -117,7 +115,7 @@ fn run_tighten_inner(
     };
 
     // 2. Load configuration
-    let config = load_config()?;
+    let config = super::common::load_config().map_err(TightenError::Config)?;
 
     // 3. Run check to get all current violation counts
     let aggregation_result = run_full_check(&config)?;
@@ -197,28 +195,6 @@ fn run_tighten_inner(
     Ok(TightenResult::Success(tightened_budgets.len()))
 }
 
-/// Load ratchet.toml configuration
-fn load_config() -> Result<Config, TightenError> {
-    let config_path = Path::new("ratchet.toml");
-    if !config_path.exists() {
-        return Err(TightenError::Other(
-            "ratchet.toml not found. Run 'ratchet init' to create it.".to_string(),
-        ));
-    }
-
-    Ok(Config::load(config_path)?)
-}
-
-/// Build and filter rule registry
-fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, TightenError> {
-    // Use the centralized build_from_config method which loads:
-    // 1. Embedded builtin rules
-    // 2. Filesystem builtin rules (if present)
-    // 3. Custom rules (if present)
-    // 4. Filters by config
-    Ok(RuleRegistry::build_from_config(config)?)
-}
-
 /// Run a full check and return aggregation results
 fn run_full_check(
     config: &Config,
@@ -232,7 +208,7 @@ fn run_full_check(
     };
 
     // Build rule registry
-    let registry = build_and_filter_rule_registry(config)?;
+    let registry = super::common::build_registry(config)?;
 
     if registry.is_empty() {
         return Err(TightenError::Other(
@@ -241,7 +217,7 @@ fn run_full_check(
     }
 
     // Discover files
-    let files = discover_files(&[".".to_string()], config)?;
+    let files = super::common::discover_files(&[".".to_string()], config)?;
 
     if files.is_empty() {
         return Err(TightenError::Other("No files found to check.".to_string()));
@@ -256,29 +232,6 @@ fn run_full_check(
     let aggregation_result = aggregator.aggregate(execution_result.violations);
 
     Ok(aggregation_result)
-}
-
-/// Discover files using FileWalker
-fn discover_files(
-    paths: &[String],
-    config: &Config,
-) -> Result<Vec<crate::engine::file_walker::FileEntry>, TightenError> {
-    let mut all_files = Vec::new();
-
-    for path_str in paths {
-        let path = Path::new(path_str);
-
-        // Create FileWalker with include/exclude patterns from config
-        let walker = FileWalker::new(path, &config.ratchet.include, &config.ratchet.exclude)?;
-
-        // Collect files from this path
-        for result in walker.walk() {
-            let file = result?;
-            all_files.push(file);
-        }
-    }
-
-    Ok(all_files)
 }
 
 #[cfg(test)]

@@ -11,12 +11,9 @@
 
 use crate::cli::args::OutputFormat;
 use crate::config::counts::CountsManager;
-use crate::config::ratchet_toml::Config;
 use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
-use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
-use crate::rules::RuleRegistry;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
@@ -46,6 +43,7 @@ pub(crate) enum CheckError {
     Io(#[from] std::io::Error),
 
     #[error("{0}")]
+    #[allow(dead_code)] // Reserved for future use
     Other(String),
 }
 
@@ -91,13 +89,13 @@ pub fn run_check(paths: &[String], format: OutputFormat) -> i32 {
 /// Internal implementation of check command
 fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, CheckError> {
     // 1. Load ratchet.toml config
-    let config = load_config()?;
+    let config = super::common::load_config()?;
 
     // 2. Load ratchet-counts.toml
     let counts = load_counts()?;
 
     // 3. Build rule registry (load builtin + custom rules, apply config filter)
-    let registry = RuleRegistry::build_from_config(&config)?;
+    let registry = super::common::build_registry(&config)?;
 
     // If no rules are enabled, warn and exit successfully
     if registry.is_empty() {
@@ -106,7 +104,7 @@ fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, Check
     }
 
     // 5. Discover files using FileWalker
-    let files = discover_files(paths, &config)?;
+    let files = super::common::discover_files(paths, &config)?;
 
     if files.is_empty() {
         eprintln!("Warning: No files found to check.");
@@ -140,18 +138,6 @@ fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, Check
     Ok(aggregation_result.passed)
 }
 
-/// Load ratchet.toml configuration
-pub(crate) fn load_config() -> Result<Config, CheckError> {
-    let config_path = Path::new("ratchet.toml");
-    if !config_path.exists() {
-        return Err(CheckError::Other(
-            "ratchet.toml not found. Run 'ratchet init' to create it.".to_string(),
-        ));
-    }
-
-    Ok(Config::load(config_path)?)
-}
-
 /// Load ratchet-counts.toml
 pub(crate) fn load_counts() -> Result<CountsManager, CheckError> {
     let counts_path = Path::new("ratchet-counts.toml");
@@ -164,39 +150,6 @@ pub(crate) fn load_counts() -> Result<CountsManager, CheckError> {
     }
 
     Ok(CountsManager::load(counts_path)?)
-}
-
-/// Build rule registry with all builtin and custom rules
-///
-/// DEPRECATED: Use RuleRegistry::build_from_config instead.
-/// This function is kept for backward compatibility with list.rs.
-pub(crate) fn build_rule_registry(config: &Config) -> Result<RuleRegistry, CheckError> {
-    // Delegate to the centralized build_from_config method
-    // Note: build_from_config already filters by config, so we don't need to call filter_by_config separately
-    Ok(RuleRegistry::build_from_config(config)?)
-}
-
-/// Discover files to check using FileWalker
-pub(crate) fn discover_files(
-    paths: &[String],
-    config: &Config,
-) -> Result<Vec<crate::engine::file_walker::FileEntry>, CheckError> {
-    let mut all_files = Vec::new();
-
-    for path_str in paths {
-        let path = Path::new(path_str);
-
-        // Create FileWalker with include/exclude patterns from config
-        let walker = FileWalker::new(path, &config.ratchet.include, &config.ratchet.exclude)?;
-
-        // Collect files from this path
-        for result in walker.walk() {
-            let file = result?;
-            all_files.push(file);
-        }
-    }
-
-    Ok(all_files)
 }
 
 /// Print human-readable output

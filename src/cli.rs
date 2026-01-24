@@ -3,6 +3,7 @@
 pub mod args;
 pub mod bump;
 pub mod check;
+pub mod common;
 pub mod init;
 pub mod list;
 pub mod merge_driver;

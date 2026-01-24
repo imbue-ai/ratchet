@@ -6,9 +6,7 @@
 //! - Supports both human-readable and JSONL output formats
 
 use crate::cli::args::OutputFormat;
-use crate::cli::check::{
-    EXIT_ERROR, EXIT_SUCCESS, build_rule_registry, discover_files, load_config, load_counts,
-};
+use crate::cli::check::{EXIT_ERROR, EXIT_SUCCESS, load_counts};
 use crate::config::counts::CountsManager;
 use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
@@ -82,15 +80,13 @@ pub fn run_list(format: OutputFormat) -> i32 {
 /// Internal implementation of list command
 fn run_list_inner(format: OutputFormat) -> Result<(), ListError> {
     // 1. Load ratchet.toml config
-    let config = load_config()?;
+    let config = super::common::load_config()?;
 
     // 2. Load ratchet-counts.toml
     let counts = load_counts()?;
 
     // 3. Build rule registry (load builtin + custom rules, apply config filter)
-    // Note: build_rule_registry now delegates to RuleRegistry::build_from_config,
-    // which already filters by config, so no need to filter again
-    let registry = build_rule_registry(&config)?;
+    let registry = super::common::build_registry(&config)?;
 
     // If no rules are enabled, show empty list
     if registry.is_empty() {
@@ -101,7 +97,7 @@ fn run_list_inner(format: OutputFormat) -> Result<(), ListError> {
     }
 
     // 5. Discover files using FileWalker
-    let files = discover_files(&[".".to_string()], &config)?;
+    let files = super::common::discover_files(&[".".to_string()], &config)?;
 
     // 6. Run ExecutionEngine to get current violation counts
     // We need to clone rule metadata before moving registry into engine
