@@ -348,6 +348,62 @@ Reserved fields for future use:
 
 Codes 4-127 are reserved for future use.
 
+## Rule Registry
+
+### Single Point of Interface
+
+The **RuleRegistry** is the canonical interface for loading and managing rules in Ratchet. All rule loading in normal operation MUST go through the `RuleRegistry::build_from_config()` method. This single point of interface ensures:
+
+- **Consistency**: All components load rules the same way
+- **No duplicates**: Rules with the same ID are properly deduplicated through override behavior
+- **Proper filtering**: Configuration-based and language-based filters are applied uniformly
+
+### Loading Order
+
+`RuleRegistry::build_from_config()` loads rules in a specific order that supports overrides:
+
+1. **Embedded rules**: Built-in rules compiled into the binary (from `include_str!` macros)
+2. **Filesystem builtin rules**: Rules from `builtin-ratchets/` directory (for development/overrides)
+3. **Custom rules**: User-defined rules from `ratchets/` directory
+4. **Config filter**: Remove disabled rules based on `ratchet.toml` settings
+5. **Language filter**: Remove rules for unconfigured languages
+
+Later rules override earlier rules with the same ID. This allows filesystem rules to override embedded rules, and custom rules to override builtin rules.
+
+### Rule Structure
+
+Rules are organized by type:
+
+- **Regex rules**: Language-agnostic pattern matching in `common/regex/` and per-language `regex/` directories
+- **AST rules**: Tree-sitter queries in per-language `ast/` directories
+
+Builtin rules use a language-first directory structure:
+```
+builtin-ratchets/
+├── common/regex/           # Language-agnostic regex rules
+├── rust/ast/               # Rust AST rules
+├── python/ast/             # Python AST rules
+└── typescript/ast/         # TypeScript AST rules
+```
+
+Custom rules use a type-first structure:
+```
+ratchets/
+├── regex/                  # Custom regex rules (all languages)
+└── ast/                    # Custom AST rules (all languages)
+```
+
+### Usage in Commands
+
+All commands that need rules use `RuleRegistry::build_from_config()`:
+
+- `ratchet check`: Loads all enabled rules filtered by config
+- `ratchet bump`: Validates rule exists before bumping budget
+- `ratchet tighten`: Loads all enabled rules to count violations
+- `ratchet list`: Lists all enabled rules with their status
+
+This centralization eliminates rule loading duplication and ensures all commands see the same set of rules.
+
 ## Design Principles
 
 ### Performance
