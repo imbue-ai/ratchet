@@ -29,6 +29,7 @@
 "src/rules" = 28
 
 [no-unwrap]
+"." = 0
 "src" = 12
 "src/cli" = 65
 "src/config" = 72
