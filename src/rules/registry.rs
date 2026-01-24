@@ -549,7 +549,7 @@ impl RuleRegistry {
         }
 
         // Step 3: Load custom rules (user-defined)
-        // These warn if they override builtin rules
+        // These silently override builtin rules if they have the same ID
         let custom_regex_dir = std::path::PathBuf::from("ratchets").join("regex");
         if custom_regex_dir.exists() {
             registry.load_custom_regex_rules(&custom_regex_dir, Some(&rule_context))?;
