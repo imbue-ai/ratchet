@@ -78,7 +78,8 @@ impl RuleRegistry {
     /// - There is an I/O error reading a file
     pub fn load_builtin_regex_rules(&mut self, builtin_dir: &Path) -> Result<(), RuleError> {
         // Built-in rules don't use pattern references, so we pass None
-        self.load_regex_rules_from_dir(builtin_dir, None)
+        // Don't warn on override - filesystem builtins overriding embedded is expected
+        self.load_regex_rules_from_dir(builtin_dir, None, false)
     }
 
     /// Load custom regex rules from a directory
@@ -103,17 +104,25 @@ impl RuleRegistry {
         custom_dir: &Path,
         ctx: Option<&RuleContext>,
     ) -> Result<(), RuleError> {
-        self.load_regex_rules_from_dir(custom_dir, ctx)
+        // Warn on override - custom rules overriding builtins is unexpected
+        self.load_regex_rules_from_dir(custom_dir, ctx, true)
     }
 
     /// Internal helper to load regex rules from a directory
     ///
     /// Scans for .toml files and loads them as RegexRules.
     /// If a rule with the same ID already exists, it will be replaced (allowing overrides).
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - Directory to load rules from
+    /// * `ctx` - Optional pattern context for resolving pattern references
+    /// * `warn_on_override` - Whether to warn when overriding an existing rule
     fn load_regex_rules_from_dir(
         &mut self,
         dir: &Path,
         ctx: Option<&RuleContext>,
+        warn_on_override: bool,
     ) -> Result<(), RuleError> {
         // Check if directory exists
         if !dir.exists() {
@@ -168,8 +177,8 @@ impl RuleRegistry {
             let rule_id = rule.id().clone();
 
             // Allow overriding existing rules (for filesystem to override embedded)
-            // but warn if we're replacing an existing rule
-            if self.rules.contains_key(&rule_id) {
+            // Warn if requested (e.g., when custom rules override builtins)
+            if warn_on_override && self.rules.contains_key(&rule_id) {
                 eprintln!(
                     "Warning: Overriding rule '{}' with version from {}",
                     rule_id.as_str(),
@@ -177,7 +186,7 @@ impl RuleRegistry {
                 );
             }
 
-            // Add/replace rule in registry
+            // Add/replace rule in registry (HashMap insert replaces existing key)
             self.rules.insert(rule_id, Box::new(rule));
         }
 
@@ -297,7 +306,8 @@ impl RuleRegistry {
             let ast_path = lang_path.join("ast");
             if ast_path.exists() && ast_path.is_dir() {
                 // Load all AST rules from this language's ast subdirectory
-                self.load_ast_rules_from_dir(&ast_path, Some(&rule_context))?;
+                // Don't warn on override - filesystem builtins overriding embedded is expected
+                self.load_ast_rules_from_dir(&ast_path, Some(&rule_context), false)?;
             }
         }
 
@@ -328,17 +338,25 @@ impl RuleRegistry {
         custom_dir: &Path,
         ctx: Option<&RuleContext>,
     ) -> Result<(), RuleError> {
-        self.load_ast_rules_from_dir(custom_dir, ctx)
+        // Warn on override - custom rules overriding builtins is unexpected
+        self.load_ast_rules_from_dir(custom_dir, ctx, true)
     }
 
     /// Internal helper to load AST rules from a directory
     ///
     /// Scans for .toml files and loads them as AstRules.
     /// If a rule with the same ID already exists, it will be replaced (allowing overrides).
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - Directory to load rules from
+    /// * `ctx` - Optional pattern context for resolving pattern references
+    /// * `warn_on_override` - Whether to warn when overriding an existing rule
     fn load_ast_rules_from_dir(
         &mut self,
         dir: &Path,
         ctx: Option<&RuleContext>,
+        warn_on_override: bool,
     ) -> Result<(), RuleError> {
         // Check if directory exists
         if !dir.exists() {
@@ -396,8 +414,8 @@ impl RuleRegistry {
             let rule_id = rule.id().clone();
 
             // Allow overriding existing rules (for filesystem to override embedded)
-            // but warn if we're replacing an existing rule
-            if self.rules.contains_key(&rule_id) {
+            // Warn if requested (e.g., when custom rules override builtins)
+            if warn_on_override && self.rules.contains_key(&rule_id) {
                 eprintln!(
                     "Warning: Overriding rule '{}' with version from {}",
                     rule_id.as_str(),
@@ -405,7 +423,7 @@ impl RuleRegistry {
                 );
             }
 
-            // Add/replace rule in registry
+            // Add/replace rule in registry (HashMap insert replaces existing key)
             self.rules.insert(rule_id, Box::new(rule));
         }
 
@@ -476,6 +494,66 @@ impl RuleRegistry {
     /// Check if the registry is empty
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
+    }
+
+    /// Build a fully configured rule registry from the given config.
+    ///
+    /// This is the ONLY function that should be used to create a rule registry
+    /// for normal operation. It loads rules in the correct order:
+    /// 1. Embedded builtin rules (compiled into binary)
+    /// 2. Filesystem builtin rules (from builtin-ratchets/ - for overrides/development)
+    /// 3. Custom rules (from ratchets/ - user-defined rules)
+    /// 4. Filters by config (removes disabled rules)
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The configuration containing patterns and rule settings
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuleError` if any rule loading step fails
+    pub fn build_from_config(
+        config: &crate::config::ratchet_toml::Config,
+    ) -> Result<Self, RuleError> {
+        let mut registry = Self::new();
+
+        // Create RuleContext from config patterns
+        let rule_context = RuleContext::new(config.patterns.clone());
+
+        // Step 1: Load embedded builtin rules (always available)
+        registry.load_embedded_builtin_regex_rules()?;
+        registry.load_embedded_builtin_ast_rules()?;
+
+        // Step 2: Load filesystem builtin rules (for overrides or development)
+        // These silently override embedded rules if present
+        let builtin_regex_dir = std::path::PathBuf::from("builtin-ratchets")
+            .join("common")
+            .join("regex");
+        if builtin_regex_dir.exists() {
+            registry.load_builtin_regex_rules(&builtin_regex_dir)?;
+        }
+
+        let builtin_ratchets_dir = std::path::PathBuf::from("builtin-ratchets");
+        if builtin_ratchets_dir.exists() {
+            registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
+        }
+
+        // Step 3: Load custom rules (user-defined)
+        // These warn if they override builtin rules
+        let custom_regex_dir = std::path::PathBuf::from("ratchets").join("regex");
+        if custom_regex_dir.exists() {
+            registry.load_custom_regex_rules(&custom_regex_dir, Some(&rule_context))?;
+        }
+
+        let custom_ast_dir = std::path::PathBuf::from("ratchets").join("ast");
+        if custom_ast_dir.exists() {
+            registry.load_custom_ast_rules(&custom_ast_dir, Some(&rule_context))?;
+        }
+
+        // Step 4: Filter by config (remove disabled rules)
+        registry.filter_by_config(&config.rules);
+
+        Ok(registry)
     }
 }
 
@@ -1223,5 +1301,200 @@ query = "(unclosed_paren"
                 "no-panic rule not found"
             );
         }
+    }
+
+    #[test]
+    fn test_no_duplicate_rule_ids_after_override() {
+        // Test that when a filesystem rule overrides an embedded rule,
+        // there's exactly one rule with that ID in the registry
+        let temp_dir = TempDir::new().unwrap();
+        create_test_rule_file(temp_dir.path(), "override-rule.toml", "test-override");
+
+        let mut registry = RuleRegistry::new();
+
+        // Load the rule once
+        registry.load_builtin_regex_rules(temp_dir.path()).unwrap();
+        assert_eq!(registry.len(), 1);
+
+        // Load again with same rule ID (simulating filesystem override of embedded)
+        registry.load_builtin_regex_rules(temp_dir.path()).unwrap();
+
+        // Should still have exactly 1 rule, not 2
+        assert_eq!(registry.len(), 1);
+
+        // Verify the rule is accessible
+        let rule_id = RuleId::new("test-override").unwrap();
+        assert!(registry.get_rule(&rule_id).is_some());
+    }
+
+    #[test]
+    fn test_override_warnings_controlled_by_parameter() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_rule_file(temp_dir.path(), "warning-test.toml", "warning-test");
+
+        let mut registry = RuleRegistry::new();
+
+        // Load builtin (no warning expected since it's first load)
+        registry.load_builtin_regex_rules(temp_dir.path()).unwrap();
+        assert_eq!(registry.len(), 1);
+
+        // Load builtin again (no warning expected - warn_on_override=false)
+        registry.load_builtin_regex_rules(temp_dir.path()).unwrap();
+        assert_eq!(registry.len(), 1);
+
+        // Load custom (warning expected - warn_on_override=true, but we can't easily test stderr)
+        registry
+            .load_custom_regex_rules(temp_dir.path(), None)
+            .unwrap();
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn test_complete_loading_sequence_no_duplicates() {
+        // Simulate the complete loading sequence from build_rule_registry in check.rs
+        // This tests that embedded -> filesystem builtin -> custom loading produces
+        // exactly one rule per ID
+
+        let builtin_dir = TempDir::new().unwrap();
+        let custom_dir = TempDir::new().unwrap();
+
+        // Create a rule in both builtin and custom dirs with the same ID
+        create_test_rule_file(builtin_dir.path(), "shared-rule.toml", "shared-rule");
+        create_test_rule_file(custom_dir.path(), "shared-rule.toml", "shared-rule");
+
+        // Also create unique rules in each directory
+        create_test_rule_file(builtin_dir.path(), "builtin-only.toml", "builtin-only");
+        create_test_rule_file(custom_dir.path(), "custom-only.toml", "custom-only");
+
+        let mut registry = RuleRegistry::new();
+
+        // Step 1: Load embedded builtin rules (simulated by loading from builtin_dir first)
+        registry
+            .load_builtin_regex_rules(builtin_dir.path())
+            .unwrap();
+        assert_eq!(registry.len(), 2); // shared-rule and builtin-only
+
+        // Step 2: Load filesystem builtin rules (same directory, should not duplicate)
+        registry
+            .load_builtin_regex_rules(builtin_dir.path())
+            .unwrap();
+        assert_eq!(registry.len(), 2); // Still 2, no duplicates
+
+        // Step 3: Load custom rules (may override builtin)
+        registry
+            .load_custom_regex_rules(custom_dir.path(), None)
+            .unwrap();
+        assert_eq!(registry.len(), 3); // shared-rule (overridden), builtin-only, custom-only
+
+        // Verify all rules are accessible
+        assert!(
+            registry
+                .get_rule(&RuleId::new("shared-rule").unwrap())
+                .is_some()
+        );
+        assert!(
+            registry
+                .get_rule(&RuleId::new("builtin-only").unwrap())
+                .is_some()
+        );
+        assert!(
+            registry
+                .get_rule(&RuleId::new("custom-only").unwrap())
+                .is_some()
+        );
+
+        // Verify no duplicate IDs by checking that iter_rules count equals len
+        let iter_count = registry.iter_rules().count();
+        assert_eq!(iter_count, registry.len());
+    }
+
+    #[test]
+    #[cfg(feature = "lang-rust")]
+    fn test_build_from_config_loads_embedded_rules() {
+        use crate::config::ratchet_toml::{Config, OutputConfig, RatchetMeta, RulesConfig};
+        use crate::types::GlobPattern;
+        use std::collections::HashMap;
+
+        // Create a minimal config (without requiring ratchet.toml file)
+        let config = Config {
+            ratchet: RatchetMeta {
+                version: "1".to_string(),
+                languages: vec![crate::types::Language::Rust],
+                include: vec![GlobPattern::new("**/*.rs".to_string())],
+                exclude: vec![],
+            },
+            rules: RulesConfig {
+                builtin: HashMap::new(),
+                custom: HashMap::new(),
+            },
+            output: OutputConfig::default(),
+            patterns: HashMap::new(),
+        };
+
+        // Build registry from config
+        let registry = RuleRegistry::build_from_config(&config).unwrap();
+
+        // Should have loaded embedded builtin rules
+        // At minimum, we should have the Rust AST rules: no-unwrap, no-panic, no-expect
+        assert!(registry.len() >= 3);
+
+        // Verify specific embedded rules are present
+        let no_unwrap = RuleId::new("no-unwrap").unwrap();
+        let no_panic = RuleId::new("no-panic").unwrap();
+        let no_expect = RuleId::new("no-expect").unwrap();
+
+        assert!(
+            registry.get_rule(&no_unwrap).is_some(),
+            "no-unwrap rule should be loaded from embedded rules"
+        );
+        assert!(
+            registry.get_rule(&no_panic).is_some(),
+            "no-panic rule should be loaded from embedded rules"
+        );
+        assert!(
+            registry.get_rule(&no_expect).is_some(),
+            "no-expect rule should be loaded from embedded rules"
+        );
+    }
+
+    #[test]
+    fn test_build_from_config_respects_disabled_rules() {
+        use crate::config::ratchet_toml::{
+            Config, OutputConfig, RatchetMeta, RuleValue, RulesConfig,
+        };
+        use crate::types::GlobPattern;
+        use std::collections::HashMap;
+
+        // Create config with a disabled rule
+        let mut builtin_rules = HashMap::new();
+        builtin_rules.insert(
+            RuleId::new("no-todo-comments").unwrap(),
+            RuleValue::Enabled(false),
+        );
+
+        let config = Config {
+            ratchet: RatchetMeta {
+                version: "1".to_string(),
+                languages: vec![],
+                include: vec![GlobPattern::new("**/*".to_string())],
+                exclude: vec![],
+            },
+            rules: RulesConfig {
+                builtin: builtin_rules,
+                custom: HashMap::new(),
+            },
+            output: OutputConfig::default(),
+            patterns: HashMap::new(),
+        };
+
+        // Build registry from config
+        let registry = RuleRegistry::build_from_config(&config).unwrap();
+
+        // The no-todo-comments rule should be filtered out
+        let no_todo_comments = RuleId::new("no-todo-comments").unwrap();
+        assert!(
+            registry.get_rule(&no_todo_comments).is_none(),
+            "no-todo-comments should be filtered out when disabled in config"
+        );
     }
 }

@@ -87,11 +87,10 @@ fn run_list_inner(format: OutputFormat) -> Result<(), ListError> {
     // 2. Load ratchet-counts.toml
     let counts = load_counts()?;
 
-    // 3. Build rule registry (load builtin + custom rules)
-    let mut registry = build_rule_registry(&config)?;
-
-    // 4. Filter rules by config
-    registry.filter_by_config(&config.rules);
+    // 3. Build rule registry (load builtin + custom rules, apply config filter)
+    // Note: build_rule_registry now delegates to RuleRegistry::build_from_config,
+    // which already filters by config, so no need to filter again
+    let registry = build_rule_registry(&config)?;
 
     // If no rules are enabled, show empty list
     if registry.is_empty() {

@@ -13,9 +13,9 @@ use crate::engine::aggregator::ViolationAggregator;
 use crate::engine::executor::ExecutionEngine;
 use crate::engine::file_walker::FileWalker;
 use crate::error::ConfigError;
-use crate::rules::{RuleContext, RuleRegistry};
+use crate::rules::RuleRegistry;
 use crate::types::{RegionPath, RuleId};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Error type specific to tighten command
 #[derive(Debug, thiserror::Error)]
@@ -211,41 +211,12 @@ fn load_config() -> Result<Config, TightenError> {
 
 /// Build and filter rule registry
 fn build_and_filter_rule_registry(config: &Config) -> Result<RuleRegistry, TightenError> {
-    let mut registry = RuleRegistry::new();
-
-    // Create RuleContext from config patterns
-    let rule_context = RuleContext::new(config.patterns.clone());
-
-    // Load builtin regex rules
-    let builtin_regex_dir = PathBuf::from("builtin-ratchets")
-        .join("common")
-        .join("regex");
-    if builtin_regex_dir.exists() {
-        registry.load_builtin_regex_rules(&builtin_regex_dir)?;
-    }
-
-    // Load builtin AST rules
-    let builtin_ratchets_dir = PathBuf::from("builtin-ratchets");
-    if builtin_ratchets_dir.exists() {
-        registry.load_builtin_ast_rules(&builtin_ratchets_dir)?;
-    }
-
-    // Load custom regex rules
-    let custom_regex_dir = PathBuf::from("ratchets").join("regex");
-    if custom_regex_dir.exists() {
-        registry.load_custom_regex_rules(&custom_regex_dir, Some(&rule_context))?;
-    }
-
-    // Load custom AST rules
-    let custom_ast_dir = PathBuf::from("ratchets").join("ast");
-    if custom_ast_dir.exists() {
-        registry.load_custom_ast_rules(&custom_ast_dir, Some(&rule_context))?;
-    }
-
-    // Filter by config
-    registry.filter_by_config(&config.rules);
-
-    Ok(registry)
+    // Use the centralized build_from_config method which loads:
+    // 1. Embedded builtin rules
+    // 2. Filesystem builtin rules (if present)
+    // 3. Custom rules (if present)
+    // 4. Filters by config
+    Ok(RuleRegistry::build_from_config(config)?)
 }
 
 /// Run a full check and return aggregation results
