@@ -160,17 +160,18 @@ impl ExecutionEngine {
 
     /// Check if a rule applies to a file
     fn rule_applies_to_file(&self, rule: &dyn Rule, file: &FileEntry) -> bool {
-        let languages = rule.languages();
-
-        // If rule has no language restriction, it applies to all files
-        if languages.is_empty() {
-            return true;
-        }
-
-        // If file has no detected language, check if rule accepts it
+        // Rules only apply to program files (files with recognized language extensions)
+        // Non-program files (.md, .toml, .jsonl, etc.) are excluded from all rules
         let Some(file_lang) = file.language else {
             return false;
         };
+
+        let languages = rule.languages();
+
+        // If rule has no language restriction, it applies to all program files
+        if languages.is_empty() {
+            return true;
+        }
 
         // Check if file's language is in rule's language list
         languages.contains(&file_lang)
@@ -315,10 +316,20 @@ pattern = "TODO"
 
         // Create a mock rule with no language restrictions
         let rule = create_test_regex_rule();
-        let file = FileEntry::new(PathBuf::from("test.rs"));
 
-        // The test rule has no language restrictions (empty vec)
-        assert!(engine.rule_applies_to_file(&rule, &file));
+        // Rule with no language restrictions applies to all program files
+        let rust_file = FileEntry::new(PathBuf::from("test.rs"));
+        assert!(engine.rule_applies_to_file(&rule, &rust_file));
+
+        let python_file = FileEntry::new(PathBuf::from("test.py"));
+        assert!(engine.rule_applies_to_file(&rule, &python_file));
+
+        // But does NOT apply to non-program files
+        let md_file = FileEntry::new(PathBuf::from("README.md"));
+        assert!(!engine.rule_applies_to_file(&rule, &md_file));
+
+        let toml_file = FileEntry::new(PathBuf::from("config.toml"));
+        assert!(!engine.rule_applies_to_file(&rule, &toml_file));
     }
 
     #[test]
