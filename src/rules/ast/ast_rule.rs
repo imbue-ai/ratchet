@@ -231,7 +231,12 @@ impl AstRule {
             Err(_) => return vec![],
         };
 
-        let query = match Query::new(&parser.language().unwrap(), &self.query_source) {
+        let tree_sitter_lang = match parser.language() {
+            Some(lang) => lang,
+            None => return vec![], // Parser not properly configured
+        };
+
+        let query = match Query::new(&tree_sitter_lang, &self.query_source) {
             Ok(q) => q,
             Err(_) => return vec![],
         };
@@ -315,7 +320,11 @@ fn validate_query(query_source: &str, language: Language) -> Result<(), RuleErro
         .get_parser(language)
         .map_err(|e| RuleError::InvalidQuery(format!("Failed to get parser: {}", e)))?;
 
-    Query::new(&parser.language().unwrap(), query_source)
+    let tree_sitter_lang = parser
+        .language()
+        .ok_or_else(|| RuleError::InvalidQuery("Parser language not configured".to_string()))?;
+
+    Query::new(&tree_sitter_lang, query_source)
         .map_err(|e| RuleError::InvalidQuery(format!("Failed to compile query: {}", e)))?;
 
     Ok(())
