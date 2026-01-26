@@ -881,3 +881,345 @@ pattern = "TODO"
         assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
     });
 }
+
+// ============================================================================
+// BUMP --ALL COMMAND TESTS
+// ============================================================================
+
+#[test]
+fn test_bump_all_with_empty_initial_counts() {
+    with_temp_dir(|temp_dir| {
+        // Create config with multiple rules
+        let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["**/*.rs"]
+
+[rules]
+no-todo-comments = true
+no-fixme-comments = true
+"#;
+        fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+        // Create empty counts file
+        fs::write(temp_dir.path().join("ratchet-counts.toml"), "").unwrap();
+
+        // Create builtin rules
+        let builtin_regex_dir = temp_dir
+            .path()
+            .join("builtin-ratchets")
+            .join("common")
+            .join("regex");
+        fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+        let todo_rule = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+        fs::write(builtin_regex_dir.join("no-todo-comments.toml"), todo_rule).unwrap();
+
+        let fixme_rule = r#"
+[rule]
+id = "no-fixme-comments"
+description = "Disallow FIXME comments"
+severity = "warning"
+
+[match]
+pattern = "FIXME"
+"#;
+        fs::write(builtin_regex_dir.join("no-fixme-comments.toml"), fixme_rule).unwrap();
+
+        // Create files with violations
+        fs::write(
+            temp_dir.path().join("test.rs"),
+            "// TODO: test\n// FIXME: fix\n",
+        )
+        .unwrap();
+
+        // Run bump --all
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
+
+        // Verify counts file was updated with current violation counts
+        let counts_content =
+            fs::read_to_string(temp_dir.path().join("ratchet-counts.toml")).unwrap();
+
+        // Should have entries for both rules
+        assert!(counts_content.contains("no-todo-comments"));
+        assert!(counts_content.contains("no-fixme-comments"));
+
+        // Parse and verify specific counts
+        let counts = ratchet::config::counts::CountsManager::parse(&counts_content).unwrap();
+        let todo_id = ratchet::types::RuleId::new("no-todo-comments").unwrap();
+        let fixme_id = ratchet::types::RuleId::new("no-fixme-comments").unwrap();
+
+        // Both rules should have budget set to 1 (current violation count)
+        assert_eq!(counts.get_budget(&todo_id, Path::new(".")), 1);
+        assert_eq!(counts.get_budget(&fixme_id, Path::new(".")), 1);
+    });
+}
+
+#[test]
+fn test_bump_all_with_existing_counts() {
+    with_temp_dir(|temp_dir| {
+        // Create config with multiple rules
+        let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["**/*.rs"]
+
+[rules]
+no-todo-comments = true
+no-fixme-comments = true
+"#;
+        fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+        // Create counts file with existing budgets
+        let counts = r#"
+[no-todo-comments]
+"." = 5
+
+[no-fixme-comments]
+"." = 3
+"#;
+        fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
+
+        // Create builtin rules
+        let builtin_regex_dir = temp_dir
+            .path()
+            .join("builtin-ratchets")
+            .join("common")
+            .join("regex");
+        fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+        let todo_rule = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+        fs::write(builtin_regex_dir.join("no-todo-comments.toml"), todo_rule).unwrap();
+
+        let fixme_rule = r#"
+[rule]
+id = "no-fixme-comments"
+description = "Disallow FIXME comments"
+severity = "warning"
+
+[match]
+pattern = "FIXME"
+"#;
+        fs::write(builtin_regex_dir.join("no-fixme-comments.toml"), fixme_rule).unwrap();
+
+        // Create files with violations (2 TODOs, 1 FIXME)
+        fs::write(
+            temp_dir.path().join("test.rs"),
+            "// TODO: test\n// TODO: another\n// FIXME: fix\n",
+        )
+        .unwrap();
+
+        // Run bump --all
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
+
+        // Verify counts were updated to current violation counts
+        let counts_content =
+            fs::read_to_string(temp_dir.path().join("ratchet-counts.toml")).unwrap();
+        let counts = ratchet::config::counts::CountsManager::parse(&counts_content).unwrap();
+        let todo_id = ratchet::types::RuleId::new("no-todo-comments").unwrap();
+        let fixme_id = ratchet::types::RuleId::new("no-fixme-comments").unwrap();
+
+        // Budgets should be set to current violation counts (2 and 1)
+        assert_eq!(counts.get_budget(&todo_id, Path::new(".")), 2);
+        assert_eq!(counts.get_budget(&fixme_id, Path::new(".")), 1);
+    });
+}
+
+#[test]
+fn test_bump_all_no_violations() {
+    with_temp_dir(|temp_dir| {
+        // Create config with rules
+        let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["**/*.rs"]
+
+[rules]
+no-todo-comments = true
+"#;
+        fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+        // Create counts file
+        let counts = r#"
+[no-todo-comments]
+"." = 5
+"#;
+        fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
+
+        // Create builtin rule
+        let builtin_regex_dir = temp_dir
+            .path()
+            .join("builtin-ratchets")
+            .join("common")
+            .join("regex");
+        fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+        let todo_rule = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+        fs::write(builtin_regex_dir.join("no-todo-comments.toml"), todo_rule).unwrap();
+
+        // Create file with NO violations
+        fs::write(temp_dir.path().join("test.rs"), "fn main() {}\n").unwrap();
+
+        // Run bump --all
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
+
+        // Verify budget was set to 0 (no violations)
+        let counts_content =
+            fs::read_to_string(temp_dir.path().join("ratchet-counts.toml")).unwrap();
+        let counts = ratchet::config::counts::CountsManager::parse(&counts_content).unwrap();
+        let todo_id = ratchet::types::RuleId::new("no-todo-comments").unwrap();
+
+        assert_eq!(counts.get_budget(&todo_id, Path::new(".")), 0);
+    });
+}
+
+#[test]
+fn test_bump_all_with_unchanged_budgets() {
+    with_temp_dir(|temp_dir| {
+        // Create config with rules
+        let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["**/*.rs"]
+
+[rules]
+no-todo-comments = true
+no-fixme-comments = true
+"#;
+        fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+        // Create counts file with budgets matching current violations
+        let counts = r#"
+[no-todo-comments]
+"." = 1
+
+[no-fixme-comments]
+"." = 1
+"#;
+        fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
+
+        // Create builtin rules
+        let builtin_regex_dir = temp_dir
+            .path()
+            .join("builtin-ratchets")
+            .join("common")
+            .join("regex");
+        fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+        let todo_rule = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+        fs::write(builtin_regex_dir.join("no-todo-comments.toml"), todo_rule).unwrap();
+
+        let fixme_rule = r#"
+[rule]
+id = "no-fixme-comments"
+description = "Disallow FIXME comments"
+severity = "warning"
+
+[match]
+pattern = "FIXME"
+"#;
+        fs::write(builtin_regex_dir.join("no-fixme-comments.toml"), fixme_rule).unwrap();
+
+        // Create file with violations matching budgets
+        fs::write(
+            temp_dir.path().join("test.rs"),
+            "// TODO: test\n// FIXME: fix\n",
+        )
+        .unwrap();
+
+        // Run bump --all
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
+
+        // Verify budgets remained the same
+        let counts_content =
+            fs::read_to_string(temp_dir.path().join("ratchet-counts.toml")).unwrap();
+        let counts = ratchet::config::counts::CountsManager::parse(&counts_content).unwrap();
+        let todo_id = ratchet::types::RuleId::new("no-todo-comments").unwrap();
+        let fixme_id = ratchet::types::RuleId::new("no-fixme-comments").unwrap();
+
+        // Budgets should remain at 1
+        assert_eq!(counts.get_budget(&todo_id, Path::new(".")), 1);
+        assert_eq!(counts.get_budget(&fixme_id, Path::new(".")), 1);
+    });
+}
+
+#[test]
+fn test_bump_all_with_no_rules_enabled() {
+    with_temp_dir(|temp_dir| {
+        // Create config with no languages (which results in no rules)
+        let config = r#"
+[ratchet]
+version = "1"
+languages = []
+include = ["**/*.rs"]
+
+[rules]
+"#;
+        fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+        // Create empty counts file
+        fs::write(temp_dir.path().join("ratchet-counts.toml"), "").unwrap();
+
+        // Run bump --all
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        // Should fail with error since no rules are enabled
+        assert_eq!(exit_code, cli::common::EXIT_ERROR);
+    });
+}
+
+#[test]
+fn test_bump_all_missing_config() {
+    with_temp_dir(|_temp_dir| {
+        // Don't create config
+
+        let exit_code = cli::bump::run_bump(None, ".", None, true);
+
+        // Should fail
+        assert_eq!(exit_code, cli::common::EXIT_ERROR);
+    });
+}
