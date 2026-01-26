@@ -9,7 +9,10 @@ fn main() {
 
     let exit_code = match cli.command {
         Command::Init { force } => match ratchet::cli::init::run_init(force) {
-            Ok(_) => 0,
+            Ok(_) => {
+                println!("Created ratchet.toml. Uncomment your languages to start checking.");
+                0
+            }
             Err(e) => {
                 eprintln!("Error: {}", e);
                 2
