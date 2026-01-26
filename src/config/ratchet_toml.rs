@@ -53,7 +53,8 @@ impl Config {
         // Validate that at least one language is specified
         if self.ratchet.languages.is_empty() {
             return Err(ConfigError::Validation(
-                "At least one language must be specified".to_string(),
+                "No languages configured. Add languages to ratchet.toml to start checking."
+                    .to_string(),
             ));
         }
 
@@ -138,6 +139,7 @@ pub struct RatchetMeta {
     pub version: String,
 
     /// Languages to analyze
+    #[serde(default)]
     pub languages: Vec<Language>,
 
     /// File patterns to include
@@ -373,10 +375,9 @@ languages = []
         let result = Config::parse(invalid);
         assert!(result.is_err());
         assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("At least one language must be specified")
+            result.unwrap_err().to_string().contains(
+                "No languages configured. Add languages to ratchet.toml to start checking."
+            )
         );
     }
 
@@ -590,6 +591,11 @@ version = "1"
 
         let result = Config::parse(invalid);
         assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains(
+                "No languages configured. Add languages to ratchet.toml to start checking."
+            )
+        );
     }
 
     #[test]

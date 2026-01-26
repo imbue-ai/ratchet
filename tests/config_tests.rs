@@ -71,6 +71,11 @@ fn test_config_load_invalid_missing_languages() {
     let result = Config::load(&path);
 
     assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg
+            .contains("No languages configured. Add languages to ratchet.toml to start checking.")
+    );
 }
 
 #[test]
@@ -80,7 +85,10 @@ fn test_config_load_invalid_empty_languages() {
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("At least one language must be specified"));
+    assert!(
+        err_msg
+            .contains("No languages configured. Add languages to ratchet.toml to start checking.")
+    );
 }
 
 #[test]
