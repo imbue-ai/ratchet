@@ -14,7 +14,7 @@ use crate::engine::executor::ExecutionEngine;
 use crate::error::ConfigError;
 use crate::rules::RuleRegistry;
 use crate::types::{RegionPath, RuleId};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Error type specific to bump command
 #[derive(Debug, thiserror::Error)]
@@ -137,7 +137,7 @@ fn run_bump_inner(
 
     // Get the old count for display purposes
     let region_path = RegionPath::new(region);
-    let old_count = get_budget_for_region(&counts, &rule_id, &region_path);
+    let old_count = counts.get_budget_by_region(&rule_id, &region_path);
 
     // 6. Update the count
     counts.set_count(&rule_id, &region_path, new_count);
@@ -201,7 +201,7 @@ fn run_bump_all(config: &Config, registry: &RuleRegistry) -> Result<(), BumpErro
 
         // Get old budget
         let region_path = RegionPath::new(".");
-        let old_count = get_budget_for_region(&counts, &rule_id, &region_path);
+        let old_count = counts.get_budget_by_region(&rule_id, &region_path);
 
         // Update the count
         counts.set_count(&rule_id, &region_path, current_count);
@@ -278,22 +278,6 @@ fn get_current_violation_count(
     }
 }
 
-/// Get the budget for a specific region from the CountsManager
-///
-/// This is different from CountsManager::get_budget which takes a file path.
-/// This function looks up the budget for a specific region path directly.
-fn get_budget_for_region(counts: &CountsManager, rule_id: &RuleId, region: &RegionPath) -> u64 {
-    // We need to use a file path in that region to query the budget
-    // Construct a dummy file path based on the region
-    let dummy_file_path = if region.as_str() == "." {
-        PathBuf::from("file.rs")
-    } else {
-        PathBuf::from(region.as_str()).join("file.rs")
-    };
-
-    counts.get_budget(rule_id, &dummy_file_path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,34 +308,5 @@ mod tests {
 
         let root = RegionPath::new(".");
         assert_eq!(root.as_str(), ".");
-    }
-
-    #[test]
-    fn test_get_budget_for_region_root() {
-        let mut counts = CountsManager::new();
-        let rule_id = RuleId::new("no-unwrap").unwrap();
-        counts.set_count(&rule_id, &RegionPath::new("."), 10);
-
-        let budget = get_budget_for_region(&counts, &rule_id, &RegionPath::new("."));
-        assert_eq!(budget, 10);
-    }
-
-    #[test]
-    fn test_get_budget_for_region_specific() {
-        let mut counts = CountsManager::new();
-        let rule_id = RuleId::new("no-unwrap").unwrap();
-        counts.set_count(&rule_id, &RegionPath::new("src/legacy"), 15);
-
-        let budget = get_budget_for_region(&counts, &rule_id, &RegionPath::new("src/legacy"));
-        assert_eq!(budget, 15);
-    }
-
-    #[test]
-    fn test_get_budget_for_region_missing() {
-        let counts = CountsManager::new();
-        let rule_id = RuleId::new("no-unwrap").unwrap();
-
-        let budget = get_budget_for_region(&counts, &rule_id, &RegionPath::new("src"));
-        assert_eq!(budget, 0); // Should default to 0
     }
 }

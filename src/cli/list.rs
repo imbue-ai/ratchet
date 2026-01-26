@@ -16,7 +16,6 @@ use crate::output::{
 use crate::rules::Rule;
 use crate::types::{Language, RuleId, Severity};
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Error type specific to list command
 #[derive(Debug, thiserror::Error)]
@@ -162,7 +161,7 @@ fn build_rule_statuses(
         let budget = violation_budgets.get(rule_id).copied().unwrap_or_else(|| {
             // If rule has no violations, get budget from counts manager
             // Use root region "." as default
-            counts.get_budget(rule_id, Path::new("."))
+            counts.get_budget_by_region(rule_id, &crate::types::RegionPath::new("."))
         });
         let passed = violation_passed.get(rule_id).copied().unwrap_or(true);
 

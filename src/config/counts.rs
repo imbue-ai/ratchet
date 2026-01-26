@@ -98,6 +98,51 @@ impl RegionTree {
         self.root_count
     }
 
+    /// Gets the budget for a specific region path using inheritance
+    ///
+    /// This method is similar to `get_budget()` but operates on region paths
+    /// directly instead of file paths. It walks up the region hierarchy to
+    /// find the appropriate budget using the same inheritance logic.
+    ///
+    /// Algorithm:
+    /// 1. Check if there's an explicit override for the given region
+    /// 2. If not, walk up to parent regions
+    /// 3. Repeat until reaching root or finding an override
+    /// 4. If no override found, return root_count (default 0)
+    pub fn get_budget_by_region(&self, region: &RegionPath) -> u64 {
+        let region_str = region.as_str();
+        let mut current_path = Path::new(region_str);
+
+        loop {
+            let current_region = RegionPath::new(current_path.to_string_lossy().to_string());
+
+            // Check if there's an explicit override for this region
+            if let Some(&count) = self.overrides.get(&current_region) {
+                return count;
+            }
+
+            // Try to go up to the parent
+            if let Some(parent) = current_path.parent() {
+                if parent == Path::new("") || parent == current_path {
+                    // We've reached the root
+                    break;
+                }
+                current_path = parent;
+            } else {
+                // No parent, we're at the root
+                break;
+            }
+        }
+
+        // No override found, check if root "." is explicitly set
+        if let Some(&count) = self.overrides.get(&RegionPath::new(".")) {
+            return count;
+        }
+
+        // Return the root count (default 0)
+        self.root_count
+    }
+
     /// Sets the count for a specific region
     pub fn set_count(&mut self, region: &RegionPath, count: u64) {
         if region.as_str() == "." {
@@ -200,6 +245,40 @@ impl CountsManager {
         self.counts
             .get(rule_id)
             .map(|tree| tree.get_budget(file_path))
+            .unwrap_or(0)
+    }
+
+    /// Gets the budget for a specific rule and region path
+    ///
+    /// This is a convenience method for querying budgets by region path directly,
+    /// without needing to construct a dummy file path. It uses the same inheritance
+    /// logic as `get_budget()`, but operates on region paths instead of file paths.
+    ///
+    /// Returns the budget using inheritance logic from the RegionTree.
+    /// If the rule is not present in the counts, returns 0 (strict enforcement).
+    ///
+    /// # Arguments
+    ///
+    /// * `rule_id` - The rule to query
+    /// * `region` - The region path to query (e.g., ".", "src", "src/legacy")
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ratchet::config::counts::CountsManager;
+    /// # use ratchet::types::{RuleId, RegionPath};
+    /// let mut counts = CountsManager::new();
+    /// let rule_id = RuleId::new("no-unwrap").unwrap();
+    /// counts.set_count(&rule_id, &RegionPath::new("."), 0);
+    /// counts.set_count(&rule_id, &RegionPath::new("src/legacy"), 15);
+    ///
+    /// assert_eq!(counts.get_budget_by_region(&rule_id, &RegionPath::new(".")), 0);
+    /// assert_eq!(counts.get_budget_by_region(&rule_id, &RegionPath::new("src/legacy")), 15);
+    /// ```
+    pub fn get_budget_by_region(&self, rule_id: &RuleId, region: &RegionPath) -> u64 {
+        self.counts
+            .get(rule_id)
+            .map(|tree| tree.get_budget_by_region(region))
             .unwrap_or(0)
     }
 
@@ -344,6 +423,70 @@ mod tests {
 
         // With no overrides, should return root_count (0)
         assert_eq!(tree.get_budget(Path::new("src/foo.rs")), 0);
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_by_region_root() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 5);
+
+        // Query by region should return the same as file-based query
+        assert_eq!(tree.get_budget_by_region(&RegionPath::new(".")), 5);
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_by_region_specific() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("src/legacy"), 15);
+
+        // Query specific region
+        assert_eq!(
+            tree.get_budget_by_region(&RegionPath::new("src/legacy")),
+            15
+        );
+
+        // Query parent region
+        assert_eq!(tree.get_budget_by_region(&RegionPath::new("src")), 0);
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_by_region_inheritance() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("src/legacy"), 15);
+
+        // Child region should inherit from parent
+        assert_eq!(
+            tree.get_budget_by_region(&RegionPath::new("src/legacy/parser")),
+            15
+        );
+    }
+
+    #[test]
+    fn test_region_tree_get_budget_by_region_nested() {
+        let mut tree = RegionTree::new();
+        tree.set_count(&RegionPath::new("."), 0);
+        tree.set_count(&RegionPath::new("src/legacy"), 15);
+        tree.set_count(&RegionPath::new("src/legacy/parser"), 7);
+
+        // Should get exact match first
+        assert_eq!(
+            tree.get_budget_by_region(&RegionPath::new("src/legacy/parser")),
+            7
+        );
+
+        // Deeper nesting should inherit
+        assert_eq!(
+            tree.get_budget_by_region(&RegionPath::new("src/legacy/parser/deep")),
+            7
+        );
+
+        // Sibling should inherit from parent
+        assert_eq!(
+            tree.get_budget_by_region(&RegionPath::new("src/legacy/other")),
+            15
+        );
     }
 
     #[test]
@@ -495,6 +638,86 @@ mod tests {
 
         // Missing rule should return 0 (strict enforcement)
         assert_eq!(manager.get_budget(&rule_id, Path::new("src/foo.rs")), 0);
+    }
+
+    #[test]
+    fn test_counts_manager_get_budget_by_region_root() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+        manager.set_count(&rule_id, &RegionPath::new("."), 10);
+
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new(".")),
+            10
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_get_budget_by_region_specific() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+        manager.set_count(&rule_id, &RegionPath::new("."), 0);
+        manager.set_count(&rule_id, &RegionPath::new("src/legacy"), 15);
+
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new("src/legacy")),
+            15
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_get_budget_by_region_inheritance() {
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+        manager.set_count(&rule_id, &RegionPath::new("."), 0);
+        manager.set_count(&rule_id, &RegionPath::new("src/legacy"), 15);
+
+        // Child region should inherit from parent
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new("src/legacy/parser")),
+            15
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_get_budget_by_region_missing_rule() {
+        let manager = CountsManager::new();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+
+        // Missing rule should return 0 (strict enforcement)
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new("src")),
+            0
+        );
+    }
+
+    #[test]
+    fn test_counts_manager_get_budget_by_region_consistency() {
+        // Verify that get_budget_by_region returns the same result as get_budget
+        // for equivalent file and region paths
+        let mut manager = CountsManager::new();
+        let rule_id = RuleId::new("no-unwrap").unwrap();
+        manager.set_count(&rule_id, &RegionPath::new("."), 0);
+        manager.set_count(&rule_id, &RegionPath::new("src"), 10);
+        manager.set_count(&rule_id, &RegionPath::new("src/legacy"), 20);
+
+        // Root region
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new(".")),
+            manager.get_budget(&rule_id, Path::new("file.rs"))
+        );
+
+        // src region
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new("src")),
+            manager.get_budget(&rule_id, Path::new("src/file.rs"))
+        );
+
+        // src/legacy region
+        assert_eq!(
+            manager.get_budget_by_region(&rule_id, &RegionPath::new("src/legacy")),
+            manager.get_budget(&rule_id, Path::new("src/legacy/file.rs"))
+        );
     }
 
     #[test]
