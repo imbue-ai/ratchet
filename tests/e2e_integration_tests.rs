@@ -221,7 +221,7 @@ no-expect = false
         fs::write("ratchet.toml", config).unwrap();
 
         // Step 3: Run check (should find violations but with default budget 0, will fail)
-        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(check_exit, cli::common::EXIT_EXCEEDED);
 
         // Step 4: Set budgets high enough to pass
@@ -233,7 +233,7 @@ no-expect = false
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Step 5: Check should now pass
-        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(check_exit, cli::common::EXIT_SUCCESS);
 
         // Step 6: Remove one TODO
@@ -246,14 +246,14 @@ no-expect = false
         assert_eq!(tighten_exit, cli::common::EXIT_SUCCESS);
 
         // Step 8: Check should still pass
-        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(check_exit, cli::common::EXIT_SUCCESS);
 
         // Step 9: Add a new TODO (should exceed budget now)
         fs::write("src/new_file.rs", "// TODO: new violation\nfn new_fn() {}").unwrap();
 
         // Step 10: Check should fail with exceeded
-        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let check_exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(check_exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -295,7 +295,7 @@ no-expect = false
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass (within all region budgets)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Now set src/legacy budget to 0
@@ -309,7 +309,7 @@ no-expect = false
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should fail (src/legacy exceeds budget)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -357,7 +357,7 @@ no-unwrap = true
         fs::write("ratchet.toml", config).unwrap();
 
         // Check should fail (no budgets set)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
 
         // Set budgets for both rules
@@ -371,7 +371,7 @@ no-unwrap = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Add more violations
@@ -388,7 +388,7 @@ fn process() {
         .unwrap();
 
         // Check should fail (both rules exceeded)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -436,7 +436,7 @@ no-todo-comments = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass (3 TODOs, budget 3)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Set specific budget for src/core
@@ -448,14 +448,14 @@ no-todo-comments = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass (core has 1 TODO, budget 1)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Add another TODO in core
         fs::write(core.join("processor.rs"), "// TODO: 4\n").unwrap();
 
         // Check should fail (core has 2 TODOs, budget 1)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -514,14 +514,14 @@ no-todo-comments = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass (only 1 TODO counted, gitignored files excluded)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Add another TODO in non-ignored location
         fs::write(src.join("lib.rs"), "// TODO: another\n").unwrap();
 
         // Check should fail
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -556,7 +556,7 @@ no-todo-comments = true
 "#;
         fs::write("ratchet-counts.toml", counts).unwrap();
 
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // EXIT_EXCEEDED (1): Over budget
@@ -566,13 +566,13 @@ no-todo-comments = true
 "#;
         fs::write("ratchet-counts.toml", counts).unwrap();
 
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
 
         // EXIT_ERROR (2): Missing config
         fs::remove_file("ratchet.toml").unwrap();
 
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_ERROR);
 
         // EXIT_PARSE_ERROR (3): Invalid TOML syntax
@@ -584,7 +584,7 @@ languages = ["rust"
 "#;
         fs::write("ratchet.toml", invalid_config).unwrap();
 
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_PARSE_ERROR);
     });
 }
@@ -679,7 +679,7 @@ no-unwrap = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check should pass (all within budgets)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // List rules
@@ -691,7 +691,7 @@ no-unwrap = true
         assert_eq!(tighten_exit, cli::common::EXIT_SUCCESS);
 
         // Check should still pass
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
     });
 }
@@ -739,7 +739,7 @@ no-todo-comments = true
 "#;
         fs::write("ratchet-counts.toml", counts).unwrap();
 
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Week 2: Clean up 2 TODOs
@@ -758,14 +758,14 @@ no-todo-comments = true
         assert_eq!(tighten_exit, cli::common::EXIT_SUCCESS);
 
         // Should still pass
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Week 4: Someone accidentally adds a new TODO
         fs::write(src.join("new_feature.rs"), "// TODO: implement\n").unwrap();
 
         // Check should fail (budget exceeded)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_EXCEEDED);
     });
 }
@@ -807,11 +807,12 @@ no-todo-comments = true
         let exit = cli::check::run_check(
             &["src".to_string(), "tests".to_string()],
             cli::OutputFormat::Human,
+            false,
         );
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Check only src
-        let exit = cli::check::run_check(&["src".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&["src".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
     });
 }
@@ -845,7 +846,7 @@ no-todo-comments = true
         fs::write("ratchet-counts.toml", counts).unwrap();
 
         // Check with JSONL format - should succeed
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Jsonl);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Jsonl, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // List with JSONL format
@@ -908,7 +909,7 @@ include = ["**/*.rs"]
         fs::write("ratchet.toml", config).unwrap();
 
         // Check empty project - should succeed with warning
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
     });
 }
@@ -937,7 +938,7 @@ no-todo-comments = true
         fs::write("ratchet.toml", config).unwrap();
 
         // Check should succeed (no violations)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
 
         // Tighten should succeed but report no changes
@@ -972,7 +973,7 @@ no-todo-comments = false
         fs::write("ratchet.toml", config).unwrap();
 
         // Check should succeed (rule disabled)
-        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
         assert_eq!(exit, cli::common::EXIT_SUCCESS);
     });
 }

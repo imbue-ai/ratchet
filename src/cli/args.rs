@@ -49,6 +49,10 @@ pub enum Command {
         /// Output format
         #[arg(short, long, default_value = "human")]
         format: OutputFormat,
+
+        /// Show files being scanned and skipped
+        #[arg(short, long)]
+        verbose: bool,
     },
 
     /// Initialize ratchet in this repository
@@ -122,9 +126,14 @@ mod tests {
     fn test_check_default_args() {
         let cli = Cli::parse_from(["ratchet", "check"]);
         match cli.command {
-            Command::Check { paths, format } => {
+            Command::Check {
+                paths,
+                format,
+                verbose,
+            } => {
                 assert_eq!(paths, vec!["."]);
                 assert_eq!(format, OutputFormat::Human);
+                assert!(!verbose);
             }
             _ => panic!("Expected Check command"),
         }
@@ -137,6 +146,28 @@ mod tests {
         match cli.command {
             Command::Check { paths, .. } => {
                 assert_eq!(paths, vec!["src/", "tests/"]);
+            }
+            _ => panic!("Expected Check command"),
+        }
+    }
+
+    #[test]
+    fn test_check_verbose_flag() {
+        let cli = Cli::parse_from(["ratchet", "check", "--verbose"]);
+        match cli.command {
+            Command::Check { verbose, .. } => {
+                assert!(verbose);
+            }
+            _ => panic!("Expected Check command"),
+        }
+    }
+
+    #[test]
+    fn test_check_verbose_short_flag() {
+        let cli = Cli::parse_from(["ratchet", "check", "-v"]);
+        match cli.command {
+            Command::Check { verbose, .. } => {
+                assert!(verbose);
             }
             _ => panic!("Expected Check command"),
         }

@@ -25,6 +25,26 @@ pub enum FileWalkerError {
     Io(#[from] std::io::Error),
 }
 
+/// Reason why a file was skipped
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkipReason {
+    /// File did not match include patterns
+    ExcludedByPattern,
+    /// File has no recognized language
+    NoMatchingLanguage,
+    /// File is not a regular file (e.g., directory, symlink)
+    NotAFile,
+}
+
+/// Result of file walking - either a file to scan or a skipped file
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WalkResult {
+    /// File to be scanned
+    File(FileEntry),
+    /// File that was skipped with reason
+    Skipped { path: PathBuf, reason: SkipReason },
+}
+
 /// A discovered file with its detected language
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileEntry {
@@ -61,6 +81,7 @@ pub struct FileWalker {
     walker: ignore::Walk,
     include_set: Option<globset::GlobSet>,
     exclude_set: Option<globset::GlobSet>,
+    verbose: bool,
 }
 
 impl FileWalker {
@@ -77,6 +98,25 @@ impl FileWalker {
         root: &Path,
         include: &[GlobPattern],
         exclude: &[GlobPattern],
+    ) -> Result<Self, FileWalkerError> {
+        Self::with_verbose(root, include, exclude, false)
+    }
+
+    /// Creates a new FileWalker with verbose mode option
+    ///
+    /// # Arguments
+    /// * `root` - Root directory to walk
+    /// * `include` - Include patterns (empty means include all)
+    /// * `exclude` - Exclude patterns (applied after include)
+    /// * `verbose` - If true, report skipped files
+    ///
+    /// # Returns
+    /// A FileWalker that will iterate over matching files
+    pub fn with_verbose(
+        root: &Path,
+        include: &[GlobPattern],
+        exclude: &[GlobPattern],
+        verbose: bool,
     ) -> Result<Self, FileWalkerError> {
         let walker = WalkBuilder::new(root)
             .hidden(false) // Don't skip hidden files by default
@@ -99,6 +139,7 @@ impl FileWalker {
             walker,
             include_set,
             exclude_set,
+            verbose,
         })
     }
 
@@ -120,15 +161,33 @@ impl FileWalker {
 
     /// Walks the directory tree and returns an iterator over matching files
     pub fn walk(self) -> impl Iterator<Item = Result<FileEntry, FileWalkerError>> {
+        self.walk_with_skip_info()
+            .filter_map(|result| match result {
+                Ok(WalkResult::File(file)) => Some(Ok(file)),
+                Ok(WalkResult::Skipped { .. }) => None,
+                Err(e) => Some(Err(e)),
+            })
+    }
+
+    /// Walks the directory tree and returns an iterator with skip information
+    pub fn walk_with_skip_info(self) -> impl Iterator<Item = Result<WalkResult, FileWalkerError>> {
         let include_set = self.include_set;
         let exclude_set = self.exclude_set;
+        let verbose = self.verbose;
 
         self.walker.filter_map(move |result| {
             match result {
                 Ok(entry) => {
                     // Only process files (not directories)
                     if !entry.file_type().is_some_and(|ft| ft.is_file()) {
-                        return None;
+                        if verbose {
+                            return Some(Ok(WalkResult::Skipped {
+                                path: entry.path().to_path_buf(),
+                                reason: SkipReason::NotAFile,
+                            }));
+                        } else {
+                            return None;
+                        }
                     }
 
                     let path = entry.path();
@@ -138,17 +197,31 @@ impl FileWalker {
                     if let Some(ref include_set) = include_set
                         && !include_set.is_match(path)
                     {
-                        return None;
+                        if verbose {
+                            return Some(Ok(WalkResult::Skipped {
+                                path: path.to_path_buf(),
+                                reason: SkipReason::ExcludedByPattern,
+                            }));
+                        } else {
+                            return None;
+                        }
                     }
 
                     // If path matches any exclude pattern, reject it
                     if let Some(ref exclude_set) = exclude_set
                         && exclude_set.is_match(path)
                     {
-                        return None;
+                        if verbose {
+                            return Some(Ok(WalkResult::Skipped {
+                                path: path.to_path_buf(),
+                                reason: SkipReason::ExcludedByPattern,
+                            }));
+                        } else {
+                            return None;
+                        }
                     }
 
-                    Some(Ok(FileEntry::new(path.to_path_buf())))
+                    Some(Ok(WalkResult::File(FileEntry::new(path.to_path_buf()))))
                 }
                 Err(e) => Some(Err(FileWalkerError::Walk(e))),
             }

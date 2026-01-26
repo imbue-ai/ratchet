@@ -171,7 +171,7 @@ fn test_check_returns_success_when_within_budget() {
     with_temp_dir(|temp_dir| {
         setup_basic_project(temp_dir.path());
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
 
         // Should pass: 1 TODO with budget of 5
         assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
@@ -190,7 +190,7 @@ fn test_check_returns_exceeded_when_over_budget() {
 "#;
         fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
 
         // Should fail: 1 TODO with budget of 0
         assert_eq!(exit_code, cli::common::EXIT_EXCEEDED);
@@ -202,7 +202,7 @@ fn test_check_returns_error_when_config_missing() {
     with_temp_dir(|_temp_dir| {
         // Don't create any config files
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
 
         // Should return error
         assert_eq!(exit_code, cli::common::EXIT_ERROR);
@@ -214,7 +214,7 @@ fn test_check_jsonl_format_returns_success() {
     with_temp_dir(|temp_dir| {
         setup_basic_project(temp_dir.path());
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Jsonl);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Jsonl, false);
 
         // Should pass with JSONL format
         assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
@@ -237,6 +237,7 @@ fn test_check_with_multiple_paths() {
         let exit_code = cli::check::run_check(
             &["src".to_string(), ".".to_string()],
             cli::OutputFormat::Human,
+            false,
         );
 
         // Should still be within budget (2 TODOs, budget 5)
@@ -259,7 +260,7 @@ no-todo-comments = true
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
 
         // Should succeed with warning (no files to check)
         assert_eq!(exit_code, cli::common::EXIT_SUCCESS);
@@ -808,7 +809,7 @@ pattern = "TODO"
         // Create file with TODO
         fs::write(temp_dir.path().join("test.rs"), "// TODO: test\n").unwrap();
 
-        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human);
+        let exit_code = cli::check::run_check(&[".".to_string()], cli::OutputFormat::Human, false);
 
         // Should fail with empty counts (budget defaults to 0)
         assert_eq!(exit_code, cli::common::EXIT_EXCEEDED);

@@ -51,18 +51,72 @@ pub(crate) fn discover_files(
     paths: &[String],
     config: &Config,
 ) -> Result<Vec<FileEntry>, FileWalkerError> {
+    discover_files_verbose(paths, config, false, &mut |_| {})
+}
+
+/// Discover files to check using FileWalker with verbose output
+///
+/// Walks the specified paths and collects all files that match the
+/// include/exclude patterns from the configuration. Optionally calls
+/// a callback for each file or skip event.
+///
+/// # Arguments
+///
+/// * `paths` - Paths to walk (directories or files)
+/// * `config` - Configuration containing include/exclude patterns
+/// * `verbose` - If true, report file scanning and skipping via callback
+/// * `callback` - Function called for each file/skip event
+///
+/// # Errors
+///
+/// Returns `FileWalkerError` if there is an error walking the file system.
+pub(crate) fn discover_files_verbose<F>(
+    paths: &[String],
+    config: &Config,
+    verbose: bool,
+    callback: &mut F,
+) -> Result<Vec<FileEntry>, FileWalkerError>
+where
+    F: FnMut(&str),
+{
+    use crate::engine::file_walker::{SkipReason, WalkResult};
+
     let mut all_files = Vec::new();
 
     for path_str in paths {
         let path = Path::new(path_str);
 
         // Create FileWalker with include/exclude patterns from config
-        let walker = FileWalker::new(path, &config.ratchet.include, &config.ratchet.exclude)?;
+        let walker = FileWalker::with_verbose(
+            path,
+            &config.ratchet.include,
+            &config.ratchet.exclude,
+            verbose,
+        )?;
 
         // Collect files from this path
-        for result in walker.walk() {
-            let file = result?;
-            all_files.push(file);
+        if verbose {
+            for result in walker.walk_with_skip_info() {
+                match result? {
+                    WalkResult::File(file) => {
+                        callback(&format!("Scanning {}...", file.path.display()));
+                        all_files.push(file);
+                    }
+                    WalkResult::Skipped { path, reason } => {
+                        let reason_str = match reason {
+                            SkipReason::ExcludedByPattern => "excluded by pattern",
+                            SkipReason::NoMatchingLanguage => "no matching language",
+                            SkipReason::NotAFile => "not a file",
+                        };
+                        callback(&format!("Skipping {} ({})", path.display(), reason_str));
+                    }
+                }
+            }
+        } else {
+            for result in walker.walk() {
+                let file = result?;
+                all_files.push(file);
+            }
         }
     }
 

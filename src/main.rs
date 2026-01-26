@@ -18,7 +18,11 @@ fn main() {
                 2
             }
         },
-        Command::Check { paths, format } => ratchet::cli::check::run_check(&paths, format),
+        Command::Check {
+            paths,
+            format,
+            verbose,
+        } => ratchet::cli::check::run_check(&paths, format, verbose),
         Command::Bump {
             rule_id,
             region,

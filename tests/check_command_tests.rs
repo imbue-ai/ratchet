@@ -67,8 +67,11 @@ fn test_check_command_within_budget() {
     std::env::set_current_dir(temp_dir.path()).unwrap();
 
     // Run the check command
-    let exit_code =
-        ratchet::cli::check::run_check(&[".".to_string()], ratchet::cli::OutputFormat::Human);
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        false,
+    );
 
     // Should pass because we have 1 TODO and budget is 2
     assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);
@@ -136,8 +139,11 @@ pattern = "TODO"
     std::env::set_current_dir(temp_dir.path()).unwrap();
 
     // Run the check command
-    let exit_code =
-        ratchet::cli::check::run_check(&[".".to_string()], ratchet::cli::OutputFormat::Human);
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        false,
+    );
 
     // Should fail because we have 2 TODOs and budget is 1
     assert_eq!(exit_code, ratchet::cli::common::EXIT_EXCEEDED);
@@ -159,8 +165,11 @@ fn test_check_command_missing_config() {
     std::env::set_current_dir(&test_subdir).unwrap();
 
     // Run the check command
-    let exit_code =
-        ratchet::cli::check::run_check(&[".".to_string()], ratchet::cli::OutputFormat::Human);
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        false,
+    );
 
     // Should return error code
     assert_eq!(exit_code, ratchet::cli::common::EXIT_ERROR);
@@ -189,8 +198,11 @@ no-todo-comments = true
     std::env::set_current_dir(temp_dir.path()).unwrap();
 
     // Run the check command
-    let exit_code =
-        ratchet::cli::check::run_check(&[".".to_string()], ratchet::cli::OutputFormat::Human);
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        false,
+    );
 
     // Should succeed with warning (no files to check)
     assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);
@@ -208,8 +220,11 @@ fn test_check_command_jsonl_format() {
     std::env::set_current_dir(temp_dir.path()).unwrap();
 
     // Run the check command with JSONL format
-    let exit_code =
-        ratchet::cli::check::run_check(&[".".to_string()], ratchet::cli::OutputFormat::Jsonl);
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Jsonl,
+        false,
+    );
 
     // Should pass because we have 1 TODO and budget is 2
     assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);

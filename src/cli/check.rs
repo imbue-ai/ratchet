@@ -51,6 +51,7 @@ pub(crate) enum CheckError {
 ///
 /// * `paths` - Paths to check (defaults to current directory)
 /// * `format` - Output format (human or JSONL)
+/// * `verbose` - If true, print files being scanned and skipped
 ///
 /// # Returns
 ///
@@ -59,8 +60,8 @@ pub(crate) enum CheckError {
 /// - 1: Exceeded (one or more rules exceeded budget)
 /// - 2: Error (configuration/I/O error)
 /// - 3: Parse error (invalid TOML configuration)
-pub fn run_check(paths: &[String], format: OutputFormat) -> i32 {
-    match run_check_inner(paths, format) {
+pub fn run_check(paths: &[String], format: OutputFormat, verbose: bool) -> i32 {
+    match run_check_inner(paths, format, verbose) {
         Ok(passed) => {
             if passed {
                 EXIT_SUCCESS
@@ -82,7 +83,11 @@ pub fn run_check(paths: &[String], format: OutputFormat) -> i32 {
 }
 
 /// Internal implementation of check command
-fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, CheckError> {
+fn run_check_inner(
+    paths: &[String],
+    format: OutputFormat,
+    verbose: bool,
+) -> Result<bool, CheckError> {
     // 1. Load ratchet.toml config
     let config = super::common::load_config()?;
 
@@ -99,15 +104,21 @@ fn run_check_inner(paths: &[String], format: OutputFormat) -> Result<bool, Check
     }
 
     // 5. Discover files using FileWalker
-    let files = super::common::discover_files(paths, &config)?;
+    let files = if verbose {
+        super::common::discover_files_verbose(paths, &config, true, &mut |msg| {
+            eprintln!("{}", msg);
+        })?
+    } else {
+        super::common::discover_files(paths, &config)?
+    };
 
     if files.is_empty() {
         eprintln!("Warning: No files found to check.");
         return Ok(true);
     }
 
-    // Print progress for human format
-    if format == OutputFormat::Human {
+    // Print progress for human format (only if not verbose, since verbose already printed)
+    if format == OutputFormat::Human && !verbose {
         eprintln!(
             "Checking {} files with {} rules...",
             files.len(),
