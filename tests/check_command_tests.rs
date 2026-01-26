@@ -231,3 +231,171 @@ fn test_check_command_jsonl_format() {
 
     std::env::set_current_dir(original_dir).unwrap();
 }
+
+#[test]
+#[serial]
+fn test_check_verbose_flag() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create ratchet.toml
+    let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["**/*.rs"]
+exclude = ["excluded/**"]
+
+[rules]
+no-todo-comments = true
+"#;
+    fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+    // Create ratchet-counts.toml
+    let counts = r#"
+[no-todo-comments]
+"." = 10
+"#;
+    fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
+
+    // Create builtin-ratchets/common/regex directory with no-todo-comments rule
+    let builtin_regex_dir = temp_dir
+        .path()
+        .join("builtin-ratchets")
+        .join("common")
+        .join("regex");
+    fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+    let rule_toml = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+    fs::write(builtin_regex_dir.join("no-todo-comments.toml"), rule_toml).unwrap();
+
+    // Create some test source files to scan
+    fs::write(temp_dir.path().join("included.rs"), "fn main() {}\n").unwrap();
+    fs::write(
+        temp_dir.path().join("has_todo.rs"),
+        "// TODO: fix this\nfn main() {}\n",
+    )
+    .unwrap();
+
+    // Create excluded directory with files to skip
+    let excluded_dir = temp_dir.path().join("excluded");
+    fs::create_dir_all(&excluded_dir).unwrap();
+    fs::write(excluded_dir.join("skipped.rs"), "fn test() {}\n").unwrap();
+
+    // Create a non-rust file to skip
+    fs::write(temp_dir.path().join("readme.txt"), "Hello\n").unwrap();
+
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(temp_dir.path()).unwrap();
+
+    // Run check with verbose flag (stderr output will go to console during test)
+    // We're testing that it doesn't crash and completes successfully
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        true, // verbose = true
+    );
+
+    // Should succeed - we have 1 TODO and budget is 10
+    assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+#[serial]
+fn test_check_verbose_short_flag_behavior() {
+    let temp_dir = TempDir::new().unwrap();
+    setup_test_project(temp_dir.path());
+
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(temp_dir.path()).unwrap();
+
+    // Run check with verbose flag (simulating -v short flag)
+    // This tests that the verbose parameter works correctly
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Human,
+        true, // verbose = true (equivalent to -v)
+    );
+
+    // Should pass because we have 1 TODO and budget is 2
+    assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+#[serial]
+fn test_check_verbose_with_jsonl_format() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create ratchet.toml with specific include pattern
+    let config = r#"
+[ratchet]
+version = "1"
+languages = ["rust"]
+include = ["src/**/*.rs"]
+
+[rules]
+no-todo-comments = true
+"#;
+    fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
+
+    // Create ratchet-counts.toml
+    let counts = r#"
+[no-todo-comments]
+"." = 10
+"#;
+    fs::write(temp_dir.path().join("ratchet-counts.toml"), counts).unwrap();
+
+    // Create builtin-ratchets/common/regex directory
+    let builtin_regex_dir = temp_dir
+        .path()
+        .join("builtin-ratchets")
+        .join("common")
+        .join("regex");
+    fs::create_dir_all(&builtin_regex_dir).unwrap();
+
+    let rule_toml = r#"
+[rule]
+id = "no-todo-comments"
+description = "Disallow TODO comments"
+severity = "warning"
+
+[match]
+pattern = "TODO"
+"#;
+    fs::write(builtin_regex_dir.join("no-todo-comments.toml"), rule_toml).unwrap();
+
+    // Create src directory with files to include
+    let src_dir = temp_dir.path().join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("included.rs"), "fn main() {}\n").unwrap();
+
+    // Create file outside src that should be skipped
+    fs::write(temp_dir.path().join("excluded.rs"), "fn test() {}\n").unwrap();
+
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(temp_dir.path()).unwrap();
+
+    // Run check with verbose flag and JSONL format
+    // Verbose messages should go to stderr, JSONL to stdout
+    let exit_code = ratchet::cli::check::run_check(
+        &[".".to_string()],
+        ratchet::cli::OutputFormat::Jsonl,
+        true, // verbose = true
+    );
+
+    // Should succeed
+    assert_eq!(exit_code, ratchet::cli::common::EXIT_SUCCESS);
+
+    std::env::set_current_dir(original_dir).unwrap();
+}
