@@ -92,9 +92,10 @@ impl HumanFormatter {
                 };
 
                 output.push_str(&format!(
-                    "  {} {}: {}\n",
+                    "  {} {} [{}]: {}\n",
                     symbol,
                     status.rule_id.as_str(),
+                    status.region.as_str(),
                     status_text
                 ));
             }
@@ -209,7 +210,12 @@ impl HumanFormatter {
                 }
                 stdout.reset()?;
 
-                write!(stdout, " {}: ", status.rule_id.as_str())?;
+                write!(
+                    stdout,
+                    " {} [{}]: ",
+                    status.rule_id.as_str(),
+                    status.region.as_str()
+                )?;
 
                 if status.passed {
                     stdout.set_color(ColorSpec::new().set_bold(true))?;
@@ -351,6 +357,7 @@ mod tests {
         assert!(output.contains(".unwrap()"));
         assert!(output.contains("✓"));
         assert!(output.contains("1 violations (budget: 5)"));
+        assert!(output.contains("no-unwrap [src]:"));
         assert!(output.contains("Check PASSED"));
     }
 
@@ -399,6 +406,7 @@ mod tests {
         assert!(output.contains("[2 violations]"));
         assert!(output.contains("✗"));
         assert!(output.contains("2 violations (budget: 1) exceeded by 1"));
+        assert!(output.contains("no-unwrap [src]:"));
         assert!(output.contains("Check FAILED: 1 rule exceeded budget"));
     }
 
@@ -467,8 +475,8 @@ mod tests {
         assert!(output.contains("no-todo"));
         assert!(output.contains("[1 violation]"));
         assert!(output.contains("[4 violations]"));
-        assert!(output.contains("✓ no-unwrap: 1 violations (budget: 5)"));
-        assert!(output.contains("✗ no-todo: 4 violations (budget: 3) exceeded by 1"));
+        assert!(output.contains("✓ no-unwrap [src]: 1 violations (budget: 5)"));
+        assert!(output.contains("✗ no-todo [src]: 4 violations (budget: 3) exceeded by 1"));
         assert!(output.contains("Check FAILED: 1 rule exceeded budget"));
     }
 
@@ -819,6 +827,7 @@ mod tests {
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("0 violations (budget: 5)"));
         assert!(output.contains("✓"));
+        assert!(output.contains("no-unwrap [src]:"));
         assert!(output.contains("Check PASSED"));
     }
 }

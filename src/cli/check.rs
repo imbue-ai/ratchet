@@ -171,8 +171,9 @@ fn print_human_output(result: &crate::engine::aggregator::AggregationResult) {
             };
 
             eprintln!(
-                "  {}: {} violations (budget: {}) {}{}",
+                "  {} [{}]: {} violations (budget: {}) {}{}",
                 status.rule_id.as_str(),
+                status.region.as_str(),
                 status.actual_count,
                 status.budget,
                 status_icon,
