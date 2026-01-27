@@ -22,52 +22,61 @@ impl HumanFormatter {
     /// Format the aggregation result for human consumption
     ///
     /// Returns a formatted string suitable for terminal display.
-    pub fn format(&self, result: &AggregationResult) -> String {
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The aggregation result to format
+    /// * `verbose` - If true, show individual violation details. If false, only show summary.
+    pub fn format(&self, result: &AggregationResult, verbose: bool) -> String {
         let mut output = String::new();
 
-        // Group statuses by rule_id
-        let mut current_rule: Option<&str> = None;
+        // Only print violation details if verbose is true
+        if verbose {
+            // Group statuses by rule_id
+            let mut current_rule: Option<&str> = None;
 
-        for status in &result.statuses {
-            // If this is a new rule, print the rule header
-            if current_rule != Some(status.rule_id.as_str()) {
-                if current_rule.is_some() {
-                    output.push('\n');
+            for status in &result.statuses {
+                // If this is a new rule, print the rule header
+                if current_rule != Some(status.rule_id.as_str()) {
+                    if current_rule.is_some() {
+                        output.push('\n');
+                    }
+
+                    // Count violations for this rule across all regions
+                    let rule_violations: Vec<&RuleRegionStatus> = result
+                        .statuses
+                        .iter()
+                        .filter(|s| s.rule_id == status.rule_id)
+                        .collect();
+                    let total_violations: u64 =
+                        rule_violations.iter().map(|s| s.actual_count).sum();
+
+                    // Rule header: no-unwrap (error) [2 violations]
+                    output.push_str(&format!(
+                        "{} [{}]\n\n",
+                        status.rule_id.as_str(),
+                        if total_violations == 1 {
+                            "1 violation".to_string()
+                        } else {
+                            format!("{} violations", total_violations)
+                        }
+                    ));
+
+                    current_rule = Some(status.rule_id.as_str());
                 }
 
-                // Count violations for this rule across all regions
-                let rule_violations: Vec<&RuleRegionStatus> = result
-                    .statuses
-                    .iter()
-                    .filter(|s| s.rule_id == status.rule_id)
-                    .collect();
-                let total_violations: u64 = rule_violations.iter().map(|s| s.actual_count).sum();
-
-                // Rule header: no-unwrap (error) [2 violations]
-                output.push_str(&format!(
-                    "{} [{}]\n\n",
-                    status.rule_id.as_str(),
-                    if total_violations == 1 {
-                        "1 violation".to_string()
-                    } else {
-                        format!("{} violations", total_violations)
+                // Print violations for this region (only if there are violations)
+                if !status.violations.is_empty() {
+                    for violation in &status.violations {
+                        output.push_str(&format!(
+                            "  {}:{}:{}\n",
+                            violation.file.display(),
+                            violation.line,
+                            violation.column
+                        ));
+                        output.push_str(&format!("      {}\n", violation.snippet.trim()));
+                        output.push('\n');
                     }
-                ));
-
-                current_rule = Some(status.rule_id.as_str());
-            }
-
-            // Print violations for this region (only if there are violations)
-            if !status.violations.is_empty() {
-                for violation in &status.violations {
-                    output.push_str(&format!(
-                        "  {}:{}:{}\n",
-                        violation.file.display(),
-                        violation.line,
-                        violation.column
-                    ));
-                    output.push_str(&format!("      {}\n", violation.snippet.trim()));
-                    output.push('\n');
                 }
             }
         }
@@ -123,70 +132,79 @@ impl HumanFormatter {
     /// Write the formatted output to stdout with colors
     ///
     /// This method handles colorization and writes directly to stdout.
-    pub fn write_to_stdout(&self, result: &AggregationResult) -> io::Result<()> {
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The aggregation result to format
+    /// * `verbose` - If true, show individual violation details. If false, only show summary.
+    pub fn write_to_stdout(&self, result: &AggregationResult, verbose: bool) -> io::Result<()> {
         let mut stdout = StandardStream::stdout(self.color_choice);
 
-        // Group statuses by rule_id
-        let mut current_rule: Option<&str> = None;
+        // Only print violation details if verbose is true
+        if verbose {
+            // Group statuses by rule_id
+            let mut current_rule: Option<&str> = None;
 
-        for status in &result.statuses {
-            // If this is a new rule, print the rule header
-            if current_rule != Some(status.rule_id.as_str()) {
-                if current_rule.is_some() {
-                    writeln!(stdout)?;
-                }
-
-                // Count violations for this rule across all regions
-                let rule_violations: Vec<&RuleRegionStatus> = result
-                    .statuses
-                    .iter()
-                    .filter(|s| s.rule_id == status.rule_id)
-                    .collect();
-                let total_violations: u64 = rule_violations.iter().map(|s| s.actual_count).sum();
-
-                // Rule header: no-unwrap (error) [2 violations]
-                stdout.set_color(ColorSpec::new().set_bold(true))?;
-                write!(stdout, "{}", status.rule_id.as_str())?;
-                stdout.reset()?;
-
-                write!(stdout, " ")?;
-
-                // Note: Severity information could be displayed here if available
-                // Currently, Violation doesn't have a severity field
-
-                stdout.set_color(ColorSpec::new().set_bold(true))?;
-                write!(
-                    stdout,
-                    "[{}]",
-                    if total_violations == 1 {
-                        "1 violation".to_string()
-                    } else {
-                        format!("{} violations", total_violations)
+            for status in &result.statuses {
+                // If this is a new rule, print the rule header
+                if current_rule != Some(status.rule_id.as_str()) {
+                    if current_rule.is_some() {
+                        writeln!(stdout)?;
                     }
-                )?;
-                stdout.reset()?;
-                writeln!(stdout)?;
-                writeln!(stdout)?;
 
-                current_rule = Some(status.rule_id.as_str());
-            }
+                    // Count violations for this rule across all regions
+                    let rule_violations: Vec<&RuleRegionStatus> = result
+                        .statuses
+                        .iter()
+                        .filter(|s| s.rule_id == status.rule_id)
+                        .collect();
+                    let total_violations: u64 =
+                        rule_violations.iter().map(|s| s.actual_count).sum();
 
-            // Print violations for this region
-            if !status.violations.is_empty() {
-                for violation in &status.violations {
-                    write!(stdout, "  ")?;
-                    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
+                    // Rule header: no-unwrap (error) [2 violations]
+                    stdout.set_color(ColorSpec::new().set_bold(true))?;
+                    write!(stdout, "{}", status.rule_id.as_str())?;
+                    stdout.reset()?;
+
+                    write!(stdout, " ")?;
+
+                    // Note: Severity information could be displayed here if available
+                    // Currently, Violation doesn't have a severity field
+
+                    stdout.set_color(ColorSpec::new().set_bold(true))?;
                     write!(
                         stdout,
-                        "{}:{}:{}",
-                        violation.file.display(),
-                        violation.line,
-                        violation.column
+                        "[{}]",
+                        if total_violations == 1 {
+                            "1 violation".to_string()
+                        } else {
+                            format!("{} violations", total_violations)
+                        }
                     )?;
                     stdout.reset()?;
                     writeln!(stdout)?;
-                    writeln!(stdout, "      {}", violation.snippet.trim())?;
                     writeln!(stdout)?;
+
+                    current_rule = Some(status.rule_id.as_str());
+                }
+
+                // Print violations for this region
+                if !status.violations.is_empty() {
+                    for violation in &status.violations {
+                        write!(stdout, "  ")?;
+                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
+                        write!(
+                            stdout,
+                            "{}:{}:{}",
+                            violation.file.display(),
+                            violation.line,
+                            violation.column
+                        )?;
+                        stdout.reset()?;
+                        writeln!(stdout)?;
+                        writeln!(stdout, "      {}", violation.snippet.trim())?;
+                        writeln!(stdout)?;
+                    }
                 }
             }
         }
@@ -328,7 +346,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("No violations found"));
     }
 
@@ -350,7 +368,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("[1 violation]"));
         assert!(output.contains("src/main.rs:10:5"));
@@ -376,7 +394,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("[2 violations]"));
         assert!(output.contains("src/main.rs:10:5"));
@@ -401,7 +419,7 @@ mod tests {
             violations_over_budget: 1,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("[2 violations]"));
         assert!(output.contains("✗"));
@@ -436,7 +454,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("no-todo"));
         assert!(output.contains("[1 violation]"));
@@ -470,7 +488,7 @@ mod tests {
             violations_over_budget: 1,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("no-unwrap"));
         assert!(output.contains("no-todo"));
         assert!(output.contains("[1 violation]"));
@@ -500,7 +518,7 @@ mod tests {
             violations_over_budget: 3,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(output.contains("Check FAILED: 2 rules exceeded budget"));
     }
 
@@ -524,7 +542,7 @@ mod tests {
 
         // This should not panic
         // We can't easily test stdout output in unit tests, but we can verify it doesn't error
-        let _ = formatter.write_to_stdout(&result);
+        let _ = formatter.write_to_stdout(&result, true);
     }
 
     #[test]
@@ -567,7 +585,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify paths with special characters are handled correctly
         assert!(output.contains("src/my file.rs:10:5"));
@@ -606,7 +624,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify special characters in snippets are preserved
         assert!(output.contains("\"hello\\nworld\".unwrap()"));
@@ -636,7 +654,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify whitespace is trimmed in output
         assert!(output.contains(".unwrap()"));
@@ -667,9 +685,9 @@ mod tests {
         };
 
         // Format multiple times
-        let output1 = formatter.format(&result);
-        let output2 = formatter.format(&result);
-        let output3 = formatter.format(&result);
+        let output1 = formatter.format(&result, true);
+        let output2 = formatter.format(&result, true);
+        let output3 = formatter.format(&result, true);
 
         // All outputs should be identical
         assert_eq!(output1, output2);
@@ -695,7 +713,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         // format() always returns plain text without ANSI codes regardless of color_choice
         // This is just testing that it doesn't error
         assert!(output.contains("no-unwrap"));
@@ -720,7 +738,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         // format() always returns plain text without ANSI codes regardless of color_choice
         // This is just testing that it doesn't error
         assert!(output.contains("no-unwrap"));
@@ -745,7 +763,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         // format() always returns plain text without ANSI codes regardless of color_choice
         // This is just testing that it doesn't error
         assert!(output.contains("no-unwrap"));
@@ -772,7 +790,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Should handle empty snippets gracefully
         assert!(output.contains("src/main.rs:10:5"));
@@ -800,7 +818,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Should handle long snippets without crashing
         assert!(output.contains("src/main.rs:10:5"));
@@ -821,7 +839,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Should still show the rule in summary even with no violations
         assert!(output.contains("no-unwrap"));

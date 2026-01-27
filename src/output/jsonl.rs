@@ -25,44 +25,52 @@ impl JsonlFormatter {
     /// Format the aggregation result as JSONL
     ///
     /// Returns a string with one JSON object per line:
-    /// - First: All violation records (sorted by rule, file, line)
+    /// - First: All violation records (sorted by rule, file, line) - only if verbose is true
     /// - Then: All summary records (sorted by rule, region)
     /// - Finally: One status record
-    pub fn format(&self, result: &AggregationResult) -> String {
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The aggregation result to format
+    /// * `verbose` - If true, output violation records. If false, skip violation records.
+    pub fn format(&self, result: &AggregationResult, verbose: bool) -> String {
         let mut output = String::new();
 
-        // Collect all violations from all statuses
-        let mut all_violations: Vec<ViolationRecord> = Vec::new();
-        for status in &result.statuses {
-            for violation in &status.violations {
-                all_violations.push(ViolationRecord {
-                    record_type: "violation".to_string(),
-                    rule: status.rule_id.as_str().to_string(),
-                    file: violation.file.clone(),
-                    line: violation.line,
-                    column: violation.column,
-                    end_line: violation.end_line,
-                    end_column: violation.end_column,
-                    snippet: violation.snippet.clone(),
-                    message: violation.message.clone(),
-                    region: violation.region.as_str().to_string(),
-                });
+        // Only output violation records if verbose is true
+        if verbose {
+            // Collect all violations from all statuses
+            let mut all_violations: Vec<ViolationRecord> = Vec::new();
+            for status in &result.statuses {
+                for violation in &status.violations {
+                    all_violations.push(ViolationRecord {
+                        record_type: "violation".to_string(),
+                        rule: status.rule_id.as_str().to_string(),
+                        file: violation.file.clone(),
+                        line: violation.line,
+                        column: violation.column,
+                        end_line: violation.end_line,
+                        end_column: violation.end_column,
+                        snippet: violation.snippet.clone(),
+                        message: violation.message.clone(),
+                        region: violation.region.as_str().to_string(),
+                    });
+                }
             }
-        }
 
-        // Sort violations by rule, then file, then line
-        all_violations.sort_by(|a, b| {
-            a.rule
-                .cmp(&b.rule)
-                .then_with(|| a.file.cmp(&b.file))
-                .then_with(|| a.line.cmp(&b.line))
-        });
+            // Sort violations by rule, then file, then line
+            all_violations.sort_by(|a, b| {
+                a.rule
+                    .cmp(&b.rule)
+                    .then_with(|| a.file.cmp(&b.file))
+                    .then_with(|| a.line.cmp(&b.line))
+            });
 
-        // Output all violation records
-        for violation in all_violations {
-            if let Ok(json) = serde_json::to_string(&violation) {
-                output.push_str(&json);
-                output.push('\n');
+            // Output all violation records
+            for violation in all_violations {
+                if let Ok(json) = serde_json::to_string(&violation) {
+                    output.push_str(&json);
+                    output.push('\n');
+                }
             }
         }
 
@@ -211,7 +219,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Should only contain status record
         let lines: Vec<&str> = output.lines().collect();
@@ -246,7 +254,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), 3); // 1 violation + 1 summary + 1 status
 
@@ -303,7 +311,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
 
         // Verify violations are sorted by rule, then file, then line
@@ -352,7 +360,7 @@ mod tests {
             violations_over_budget: 1,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), 4); // 2 violations + 1 summary + 1 status
 
@@ -411,7 +419,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), 7); // 3 violations + 3 summaries + 1 status
 
@@ -456,7 +464,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify each line is valid JSON
         for line in output.lines() {
@@ -475,7 +483,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         assert!(!output.is_empty());
     }
 
@@ -498,7 +506,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
 
         // Verify violations are sorted by line number
@@ -557,7 +565,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify all lines are valid JSON
         for line in output.lines() {
@@ -633,7 +641,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify all lines are valid JSON
         for line in output.lines() {
@@ -685,9 +693,9 @@ mod tests {
         };
 
         // Format the same result multiple times
-        let output1 = formatter.format(&result);
-        let output2 = formatter.format(&result);
-        let output3 = formatter.format(&result);
+        let output1 = formatter.format(&result, true);
+        let output2 = formatter.format(&result, true);
+        let output3 = formatter.format(&result, true);
 
         // All outputs should be byte-for-byte identical
         assert_eq!(output1, output2);
@@ -748,7 +756,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify all lines are valid JSON
         for line in output.lines() {
@@ -791,7 +799,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify the line is valid JSON
         let lines: Vec<&str> = output.lines().collect();
@@ -844,7 +852,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
 
         // Verify all lines are valid JSON
         for line in output.lines() {
@@ -876,7 +884,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
 
         // Should have 2 lines: 1 summary + 1 status (no violation records)
@@ -915,7 +923,7 @@ mod tests {
             violations_over_budget: 0,
         };
 
-        let output = formatter.format(&result);
+        let output = formatter.format(&result, true);
         let lines: Vec<&str> = output.lines().collect();
 
         // Verify violations are sorted by file path
