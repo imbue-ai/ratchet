@@ -935,4 +935,113 @@ mod tests {
         assert_eq!(v2["file"], "src/m.rs");
         assert_eq!(v3["file"], "src/z.rs");
     }
+
+    #[test]
+    fn test_format_non_verbose_hides_violation_records() {
+        // Test that when verbose=false, "type":"violation" records are not output
+        let formatter = JsonlFormatter::new();
+        let violations = vec![
+            create_test_violation(
+                "no-unwrap",
+                "src/main.rs",
+                "src",
+                10,
+                5,
+                ".unwrap()",
+                "Disallow .unwrap() calls",
+            ),
+            create_test_violation(
+                "no-unwrap",
+                "src/lib.rs",
+                "src",
+                20,
+                5,
+                "result.unwrap()",
+                "Disallow .unwrap() calls",
+            ),
+        ];
+        let status = create_test_status("no-unwrap", "src", 2, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 2,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result, false);
+
+        // Parse each line as JSON
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Assert no lines have "type":"violation"
+        for line in &lines {
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_ne!(parsed["type"], "violation");
+        }
+
+        // Assert there ARE lines with "type":"summary"
+        let has_summary = lines.iter().any(|line| {
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
+            parsed["type"] == "summary"
+        });
+        assert!(has_summary);
+
+        // Assert there IS a line with "type":"status"
+        let has_status = lines.iter().any(|line| {
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
+            parsed["type"] == "status"
+        });
+        assert!(has_status);
+    }
+
+    #[test]
+    fn test_format_non_verbose_preserves_summary_records() {
+        // Test that summary and status records are still output when verbose=false
+        let formatter = JsonlFormatter::new();
+
+        // Create multiple rules with violations
+        let violations1 = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            5,
+            ".unwrap()",
+            "message",
+        )];
+        let violations2 = vec![
+            create_test_violation("no-todo", "src/lib.rs", "src", 20, 5, "// TODO", "message"),
+            create_test_violation("no-todo", "src/util.rs", "src", 30, 5, "// TODO", "message"),
+        ];
+
+        let status1 = create_test_status("no-unwrap", "src", 1, 5, violations1);
+        let status2 = create_test_status("no-todo", "src", 2, 1, violations2);
+
+        let result = AggregationResult {
+            statuses: vec![status1, status2],
+            passed: false,
+            total_violations: 3,
+            violations_over_budget: 1,
+        };
+
+        let output = formatter.format(&result, false);
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Should have 3 lines: 2 summaries + 1 status (no violation records)
+        assert_eq!(lines.len(), 3);
+
+        // Verify first two lines are summaries
+        let summary1: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        let summary2: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(summary1["type"], "summary");
+        assert_eq!(summary2["type"], "summary");
+
+        // Verify last line is status
+        let status: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+        assert_eq!(status["type"], "status");
+        assert_eq!(status["passed"], false);
+        assert_eq!(status["rules_checked"], 2);
+        assert_eq!(status["rules_exceeded"], 1);
+        assert_eq!(status["total_violations"], 3);
+    }
 }

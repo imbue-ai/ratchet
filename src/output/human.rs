@@ -848,4 +848,80 @@ mod tests {
         assert!(output.contains("no-unwrap [src]:"));
         assert!(output.contains("Check PASSED"));
     }
+
+    #[test]
+    fn test_format_non_verbose_hides_violations() {
+        // Test that when verbose=false, violation details are hidden
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+        let violations = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+        let status = create_test_status("no-unwrap", "src", 1, 5, violations);
+        let result = AggregationResult {
+            statuses: vec![status],
+            passed: true,
+            total_violations: 1,
+            violations_over_budget: 0,
+        };
+
+        let output = formatter.format(&result, false);
+
+        // Assert that output does NOT contain file:line:column
+        assert!(!output.contains("src/main.rs:10:5"));
+        // Assert that output does NOT contain snippet
+        assert!(!output.contains(".unwrap()"));
+        // Assert that output DOES contain "Summary:"
+        assert!(output.contains("Summary:"));
+        // Assert that output DOES contain rule name
+        assert!(output.contains("no-unwrap"));
+        // Assert that output DOES contain budget information
+        assert!(output.contains("1 violations (budget: 5)"));
+    }
+
+    #[test]
+    fn test_format_non_verbose_shows_summary_only() {
+        // Test that summary section IS shown when verbose=false
+        let formatter = HumanFormatter::new(ColorChoice::Never);
+
+        // Create result with multiple rules, some passing some failing
+        let violations1 = vec![create_test_violation(
+            "no-unwrap",
+            "src/main.rs",
+            "src",
+            10,
+            ".unwrap()",
+        )];
+        let violations2 = vec![
+            create_test_violation("no-todo", "src/lib.rs", "src", 20, "// TODO: fix"),
+            create_test_violation("no-todo", "src/util.rs", "src", 30, "// TODO: refactor"),
+            create_test_violation("no-todo", "src/test.rs", "src", 40, "// TODO: test"),
+            create_test_violation("no-todo", "src/other.rs", "src", 50, "// TODO: cleanup"),
+        ];
+        let status1 = create_test_status("no-unwrap", "src", 1, 5, violations1);
+        let status2 = create_test_status("no-todo", "src", 4, 3, violations2);
+        let result = AggregationResult {
+            statuses: vec![status1, status2],
+            passed: false,
+            total_violations: 5,
+            violations_over_budget: 1,
+        };
+
+        let output = formatter.format(&result, false);
+
+        // Assert summary includes all rules and their status
+        assert!(output.contains("Summary:"));
+        assert!(output.contains("✓ no-unwrap [src]: 1 violations (budget: 5)"));
+        assert!(output.contains("✗ no-todo [src]: 4 violations (budget: 3) exceeded by 1"));
+        assert!(output.contains("Check FAILED: 1 rule exceeded budget"));
+
+        // Assert that violation details are NOT shown
+        assert!(!output.contains("src/main.rs:10:5"));
+        assert!(!output.contains("src/lib.rs:20:5"));
+        assert!(!output.contains(".unwrap()"));
+        assert!(!output.contains("// TODO: fix"));
+    }
 }
