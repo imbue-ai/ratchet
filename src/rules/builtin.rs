@@ -37,14 +37,6 @@ const BUILTIN_PYTHON_REGEX_RULES: &[(&str, &str)] = &[
         include_str!("../../builtin-ratchets/python/regex/no-eval-usage.toml"),
     ),
     (
-        "no-broad-exception",
-        include_str!("../../builtin-ratchets/python/regex/no-broad-exception.toml"),
-    ),
-    (
-        "no-base-exception",
-        include_str!("../../builtin-ratchets/python/regex/no-base-exception.toml"),
-    ),
-    (
         "no-inline-imports",
         include_str!("../../builtin-ratchets/python/regex/no-inline-imports.toml"),
     ),
@@ -177,6 +169,14 @@ const BUILTIN_AST_PYTHON_RULES: &[(&str, &str)] = &[
     (
         "no-init-in-non-exception-classes",
         include_str!("../../builtin-ratchets/python/ast/no-init-in-non-exception-classes.toml"),
+    ),
+    (
+        "no-base-exception",
+        include_str!("../../builtin-ratchets/python/ast/no-base-exception.toml"),
+    ),
+    (
+        "no-broad-exception",
+        include_str!("../../builtin-ratchets/python/ast/no-broad-exception.toml"),
     ),
 ];
 
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(rules.len(), 2); // no-todo-comments and no-fixme-comments
 
         #[cfg(feature = "lang-python")]
-        assert_eq!(rules.len(), 29); // 2 common + 27 Python regex rules
+        assert_eq!(rules.len(), 27); // 2 common + 25 Python regex rules
 
         // Check that rule IDs are correct
         let rule_ids: Vec<&str> = rules.iter().map(|(id, _)| id.as_str()).collect();
@@ -351,8 +351,10 @@ mod tests {
         {
             assert!(rule_ids.contains(&"no-exec-usage"));
             assert!(rule_ids.contains(&"no-eval-usage"));
-            assert!(rule_ids.contains(&"no-broad-exception"));
             assert!(rule_ids.contains(&"no-fstring-logging"));
+            // no-broad-exception and no-base-exception moved to AST rules
+            assert!(!rule_ids.contains(&"no-broad-exception"));
+            assert!(!rule_ids.contains(&"no-base-exception"));
         }
     }
 
@@ -392,6 +394,8 @@ mod tests {
             assert!(rule_ids.contains(&"no-inline-functions"));
             assert!(rule_ids.contains(&"no-underscore-imports"));
             assert!(rule_ids.contains(&"no-init-in-non-exception-classes"));
+            assert!(rule_ids.contains(&"no-base-exception"));
+            assert!(rule_ids.contains(&"no-broad-exception"));
         }
 
         // Verify TypeScript rules are present when lang-typescript feature is enabled

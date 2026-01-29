@@ -1,0 +1,15 @@
+[rule]
+id = "no-base-exception"
+description = "Catching 'BaseException' catches system exits and keyboard interrupts. Use specific types"
+severity = "error"
+
+[match]
+language = "python"
+query = """
+(except_clause
+  [
+    (identifier) @exception
+    (as_pattern (identifier) @exception)
+  ]
+  (#eq? @exception "BaseException")) @violation
+"""

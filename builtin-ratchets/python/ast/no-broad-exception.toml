@@ -1,0 +1,15 @@
+[rule]
+id = "no-broad-exception"
+description = "Catching 'Exception' is too broad. Use specific exception types"
+severity = "error"
+
+[match]
+language = "python"
+query = """
+(except_clause
+  [
+    (identifier) @exception
+    (as_pattern (identifier) @exception)
+  ]
+  (#eq? @exception "Exception")) @violation
+"""
