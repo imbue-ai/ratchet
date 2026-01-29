@@ -57,24 +57,12 @@ const BUILTIN_PYTHON_REGEX_RULES: &[(&str, &str)] = &[
         include_str!("../../builtin-ratchets/python/regex/no-yaml-usage.toml"),
     ),
     (
-        "no-while-true",
-        include_str!("../../builtin-ratchets/python/regex/no-while-true.toml"),
-    ),
-    (
         "no-namedtuple-usage",
         include_str!("../../builtin-ratchets/python/regex/no-namedtuple-usage.toml"),
     ),
     (
-        "no-global-keyword",
-        include_str!("../../builtin-ratchets/python/regex/no-global-keyword.toml"),
-    ),
-    (
         "no-time-sleep",
         include_str!("../../builtin-ratchets/python/regex/no-time-sleep.toml"),
-    ),
-    (
-        "no-bare-print",
-        include_str!("../../builtin-ratchets/python/regex/no-bare-print.toml"),
     ),
     (
         "no-click-echo",
@@ -177,6 +165,18 @@ const BUILTIN_AST_PYTHON_RULES: &[(&str, &str)] = &[
     (
         "no-exec-usage",
         include_str!("../../builtin-ratchets/python/ast/no-exec-usage.toml"),
+    ),
+    (
+        "no-while-true",
+        include_str!("../../builtin-ratchets/python/ast/no-while-true.toml"),
+    ),
+    (
+        "no-global-keyword",
+        include_str!("../../builtin-ratchets/python/ast/no-global-keyword.toml"),
+    ),
+    (
+        "no-bare-print",
+        include_str!("../../builtin-ratchets/python/ast/no-bare-print.toml"),
     ),
 ];
 
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(rules.len(), 2); // no-todo-comments and no-fixme-comments
 
         #[cfg(feature = "lang-python")]
-        assert_eq!(rules.len(), 25); // 2 common + 23 Python regex rules
+        assert_eq!(rules.len(), 22); // 2 common + 20 Python regex rules
 
         // Check that rule IDs are correct
         let rule_ids: Vec<&str> = rules.iter().map(|(id, _)| id.as_str()).collect();
@@ -398,6 +398,9 @@ mod tests {
             assert!(rule_ids.contains(&"no-broad-exception"));
             assert!(rule_ids.contains(&"no-eval-usage"));
             assert!(rule_ids.contains(&"no-exec-usage"));
+            assert!(rule_ids.contains(&"no-while-true"));
+            assert!(rule_ids.contains(&"no-global-keyword"));
+            assert!(rule_ids.contains(&"no-bare-print"));
         }
 
         // Verify TypeScript rules are present when lang-typescript feature is enabled

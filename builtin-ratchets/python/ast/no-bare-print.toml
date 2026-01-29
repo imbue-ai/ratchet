@@ -4,5 +4,10 @@ description = "Do not use bare print statements. Use logger.info(), logger.debug
 severity = "warning"
 
 [match]
-pattern = "(?m)^\\s*print\\s*\\("
-languages = ["python"]
+language = "python"
+query = """
+(expression_statement
+  (call
+    function: (identifier) @func
+    (#eq? @func "print"))) @violation
+"""

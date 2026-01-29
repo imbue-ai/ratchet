@@ -4,5 +4,7 @@ description = "Avoid using the 'global' keyword. Pass state explicitly through f
 severity = "warning"
 
 [match]
-pattern = "\\bglobal\\s+\\w+"
-languages = ["python"]
+language = "python"
+query = """
+(global_statement) @violation
+"""
