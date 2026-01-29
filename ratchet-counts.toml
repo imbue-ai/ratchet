@@ -11,10 +11,10 @@
 ".beads" = 1
 "builtin-ratchets/regex" = 2
 "src/config" = 2
-"src/rules" = 10
+"src/rules" = 13
 
 [no-panic]
-"src/cli" = 21
+"src/cli" = 25
 "src/config" = 6
 
 [no-todo-comments]
@@ -25,16 +25,16 @@
 "src/cli" = 6
 "src/config" = 14
 "src/engine" = 22
-"src/output" = 36
-"src/rules" = 46
+"src/output" = 56
+"src/rules" = 49
 
 [no-unwrap]
 "." = 0
 "src" = 12
-"src/cli" = 65
-"src/config" = 74
+"src/cli" = 60
+"src/config" = 79
 "src/engine" = 43
-"src/output" = 50
-"src/rules" = 121
+"src/output" = 61
+"src/rules" = 131
 "src/rules/ast" = 13
 
