@@ -51,7 +51,7 @@ pub(crate) enum CheckError {
 ///
 /// * `paths` - Paths to check (defaults to current directory)
 /// * `format` - Output format (human or JSONL)
-/// * `verbose` - If true, print files being scanned and skipped
+/// * `verbose` - If true, show individual violation details. If false, show only summary.
 ///
 /// # Returns
 ///
@@ -139,13 +139,13 @@ fn run_check_inner(
         OutputFormat::Human => {
             eprintln!(); // Blank line after "Checking..." message
             let formatter = HumanFormatter::new(ColorChoice::Auto);
-            if let Err(e) = formatter.write_to_stdout(&aggregation_result) {
+            if let Err(e) = formatter.write_to_stdout(&aggregation_result, verbose) {
                 eprintln!("Error writing output: {}", e);
             }
         }
         OutputFormat::Jsonl => {
             let formatter = JsonlFormatter::new();
-            print!("{}", formatter.format(&aggregation_result));
+            print!("{}", formatter.format(&aggregation_result, verbose));
         }
     }
 

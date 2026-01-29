@@ -50,7 +50,7 @@ pub enum Command {
         #[arg(short, long, default_value = "human")]
         format: OutputFormat,
 
-        /// Show files being scanned and skipped
+        /// Show individual violation details (file, line, snippet)
         #[arg(short, long)]
         verbose: bool,
     },
