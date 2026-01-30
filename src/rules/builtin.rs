@@ -125,6 +125,14 @@ const BUILTIN_AST_RUST_RULES: &[(&str, &str)] = &[
         "no-expect",
         include_str!("../../builtin-ratchets/rust/ast/no-expect.toml"),
     ),
+    (
+        "rust-no-todo-comments",
+        include_str!("../../builtin-ratchets/rust/ast/no-todo-comments.toml"),
+    ),
+    (
+        "rust-no-fixme-comments",
+        include_str!("../../builtin-ratchets/rust/ast/no-fixme-comments.toml"),
+    ),
 ];
 
 /// Embedded built-in AST rule files for Python
@@ -375,14 +383,14 @@ mod tests {
 
         // The number of rules depends on which language features are enabled
         #[cfg(feature = "lang-rust")]
-        assert!(rules.len() >= 3); // At least the 3 Rust rules
+        assert!(rules.len() >= 5); // At least the 5 Rust rules
 
         #[cfg(all(
             feature = "lang-rust",
             not(feature = "lang-python"),
             not(feature = "lang-typescript")
         ))]
-        assert_eq!(rules.len(), 3); // Exactly 3 if only Rust is enabled
+        assert_eq!(rules.len(), 5); // Exactly 5 if only Rust is enabled
 
         // Verify Rust rules are present when lang-rust feature is enabled
         #[cfg(feature = "lang-rust")]
@@ -391,6 +399,8 @@ mod tests {
             assert!(rule_ids.contains(&"no-unwrap"));
             assert!(rule_ids.contains(&"no-panic"));
             assert!(rule_ids.contains(&"no-expect"));
+            assert!(rule_ids.contains(&"rust-no-todo-comments"));
+            assert!(rule_ids.contains(&"rust-no-fixme-comments"));
         }
 
         // Verify Python rules are present when lang-python feature is enabled

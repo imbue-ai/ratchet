@@ -45,6 +45,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
     fs::write(temp_dir.join("ratchet.toml"), config).unwrap();
 
@@ -257,6 +259,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
@@ -784,6 +788,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
         fs::write(temp_dir.path().join("ratchet-counts.toml"), "").unwrap();
@@ -845,6 +851,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
@@ -899,6 +907,8 @@ include = ["**/*.rs"]
 [rules]
 no-todo-comments = true
 no-fixme-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
@@ -979,6 +989,8 @@ include = ["**/*.rs"]
 [rules]
 no-todo-comments = true
 no-fixme-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
@@ -1059,6 +1071,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 
@@ -1119,6 +1133,8 @@ include = ["**/*.rs"]
 [rules]
 no-todo-comments = true
 no-fixme-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write(temp_dir.path().join("ratchet.toml"), config).unwrap();
 

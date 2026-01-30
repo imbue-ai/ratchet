@@ -1,0 +1,14 @@
+[rule]
+id = "rust-no-todo-comments"
+description = "Disallow TODO comments in Rust code"
+severity = "warning"
+
+[match]
+language = "rust"
+query = """
+((line_comment) @violation
+ (#match? @violation "(?i)TODO"))
+
+((block_comment) @violation
+ (#match? @violation "(?i)TODO"))
+"""

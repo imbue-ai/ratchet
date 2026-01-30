@@ -217,6 +217,8 @@ no-fixme-comments = false
 no-unwrap = false
 no-panic = false
 no-expect = false
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -281,6 +283,8 @@ no-fixme-comments = false
 no-unwrap = false
 no-panic = false
 no-expect = false
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -353,6 +357,8 @@ include = ["**/*.rs"]
 [rules]
 no-todo-comments = true
 no-unwrap = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -425,6 +431,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -504,6 +512,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -547,6 +557,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -658,6 +670,8 @@ include = ["**/*.rs"]
 no-todo-comments = true
 no-fixme-comments = true
 no-unwrap = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -729,6 +743,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -794,6 +810,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -836,6 +854,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -872,6 +892,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -934,6 +956,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = true
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
@@ -969,6 +993,8 @@ include = ["**/*.rs"]
 
 [rules]
 no-todo-comments = false
+rust-no-todo-comments = false
+rust-no-fixme-comments = false
 "#;
         fs::write("ratchet.toml", config).unwrap();
 
