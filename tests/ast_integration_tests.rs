@@ -228,6 +228,142 @@ fn clean_code() {
             );
         }
     }
+
+    // Tests for rust-no-todo-comments rule
+    #[test]
+    fn test_rust_no_todo_comments_rule_loads() {
+        let rule = load_builtin_rule("rust", "no-todo-comments");
+        assert_eq!(rule.id().as_str(), "rust-no-todo-comments");
+        assert_eq!(rule.languages(), &[Language::Rust]);
+    }
+
+    #[test]
+    fn test_rust_no_todo_comments_finds_violations() {
+        let rule = load_builtin_rule("rust", "no-todo-comments");
+        let content = read_fixture("rust_comments.rs");
+
+        let parser_cache = ParserCache::new();
+        let mut parser = parser_cache.get_parser(Language::Rust).unwrap();
+        let tree = parser.parse(&content, None).unwrap();
+
+        let violations = rule.execute_with_tree(&tree, &content, Path::new("rust_comments.rs"));
+
+        // Should find at least 5 TODO comments (line comments, block comments, doc comments)
+        assert!(
+            violations.len() >= 5,
+            "Expected at least 5 violations for TODO, found {}",
+            violations.len()
+        );
+
+        // Verify all violations contain TODO
+        for v in &violations {
+            assert!(
+                v.snippet.to_lowercase().contains("todo"),
+                "Violation should contain TODO: {}",
+                v.snippet
+            );
+        }
+    }
+
+    #[test]
+    fn test_rust_no_todo_comments_no_false_positives() {
+        let rule = load_builtin_rule("rust", "no-todo-comments");
+        let content = read_fixture("rust_comments.rs");
+
+        let parser_cache = ParserCache::new();
+        let mut parser = parser_cache.get_parser(Language::Rust).unwrap();
+        let tree = parser.parse(&content, None).unwrap();
+
+        let violations = rule.execute_with_tree(&tree, &content, Path::new("rust_comments.rs"));
+
+        // AST rules only match actual comment nodes, not strings
+        // Verify all violations are actual comments (start with // or /* or ///)
+        for v in &violations {
+            let snippet = v.snippet.trim();
+            assert!(
+                snippet.starts_with("//")
+                    || snippet.starts_with("/*")
+                    || snippet.starts_with("///")
+                    || snippet.starts_with("/**"),
+                "Should only match actual comments: {}",
+                snippet
+            );
+            // Should not be inside string literals
+            assert!(
+                !snippet.starts_with('"') && !snippet.starts_with('r'),
+                "Should not match strings: {}",
+                snippet
+            );
+        }
+    }
+
+    // Tests for rust-no-fixme-comments rule
+    #[test]
+    fn test_rust_no_fixme_comments_rule_loads() {
+        let rule = load_builtin_rule("rust", "no-fixme-comments");
+        assert_eq!(rule.id().as_str(), "rust-no-fixme-comments");
+        assert_eq!(rule.languages(), &[Language::Rust]);
+    }
+
+    #[test]
+    fn test_rust_no_fixme_comments_finds_violations() {
+        let rule = load_builtin_rule("rust", "no-fixme-comments");
+        let content = read_fixture("rust_comments.rs");
+
+        let parser_cache = ParserCache::new();
+        let mut parser = parser_cache.get_parser(Language::Rust).unwrap();
+        let tree = parser.parse(&content, None).unwrap();
+
+        let violations = rule.execute_with_tree(&tree, &content, Path::new("rust_comments.rs"));
+
+        // Should find at least 5 FIXME comments (line comments, block comments, doc comments)
+        assert!(
+            violations.len() >= 5,
+            "Expected at least 5 violations for FIXME, found {}",
+            violations.len()
+        );
+
+        // Verify all violations contain FIXME
+        for v in &violations {
+            assert!(
+                v.snippet.to_lowercase().contains("fixme"),
+                "Violation should contain FIXME: {}",
+                v.snippet
+            );
+        }
+    }
+
+    #[test]
+    fn test_rust_no_fixme_comments_no_false_positives() {
+        let rule = load_builtin_rule("rust", "no-fixme-comments");
+        let content = read_fixture("rust_comments.rs");
+
+        let parser_cache = ParserCache::new();
+        let mut parser = parser_cache.get_parser(Language::Rust).unwrap();
+        let tree = parser.parse(&content, None).unwrap();
+
+        let violations = rule.execute_with_tree(&tree, &content, Path::new("rust_comments.rs"));
+
+        // AST rules only match actual comment nodes, not strings
+        // Verify all violations are actual comments (start with // or /* or ///)
+        for v in &violations {
+            let snippet = v.snippet.trim();
+            assert!(
+                snippet.starts_with("//")
+                    || snippet.starts_with("/*")
+                    || snippet.starts_with("///")
+                    || snippet.starts_with("/**"),
+                "Should only match actual comments: {}",
+                snippet
+            );
+            // Should not be inside string literals
+            assert!(
+                !snippet.starts_with('"') && !snippet.starts_with('r'),
+                "Should not match strings: {}",
+                snippet
+            );
+        }
+    }
 }
 
 #[cfg(feature = "lang-typescript")]
