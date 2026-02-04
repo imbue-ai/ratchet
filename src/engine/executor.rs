@@ -125,36 +125,41 @@ impl ExecutionEngine {
             None
         };
 
-        // Execute AST rules with the parsed tree
+        // Execute AST rules with the parsed tree (in parallel)
         if let Some(ref tree) = tree {
-            for rule in ast_rules {
-                // Try to downcast to AstRule to use execute_with_tree
-                if let Some(ast_rule) = self.try_downcast_ast_rule(rule) {
-                    let violations = ast_rule.execute_with_tree(tree, &content, &file.path);
-                    all_violations.extend(violations);
-                } else {
-                    // Fallback to regular execute (will re-parse internally)
-                    let ctx = ExecutionContext {
-                        file_path: &file.path,
-                        content: &content,
-                        ast: None,
-                    };
-                    let violations = rule.execute(&ctx);
-                    all_violations.extend(violations);
-                }
-            }
+            let ast_violations: Vec<Violation> = ast_rules
+                .par_iter()
+                .flat_map(|&rule| {
+                    // Try to downcast to AstRule to use execute_with_tree
+                    if let Some(ast_rule) = self.try_downcast_ast_rule(rule) {
+                        ast_rule.execute_with_tree(tree, &content, &file.path)
+                    } else {
+                        // Fallback to regular execute (will re-parse internally)
+                        let ctx = ExecutionContext {
+                            file_path: &file.path,
+                            content: &content,
+                            ast: None,
+                        };
+                        rule.execute(&ctx)
+                    }
+                })
+                .collect();
+            all_violations.extend(ast_violations);
         }
 
-        // Execute regex rules
-        for rule in regex_rules {
-            let ctx = ExecutionContext {
-                file_path: &file.path,
-                content: &content,
-                ast: None,
-            };
-            let violations = rule.execute(&ctx);
-            all_violations.extend(violations);
-        }
+        // Execute regex rules (in parallel)
+        let regex_violations: Vec<Violation> = regex_rules
+            .par_iter()
+            .flat_map(|&rule| {
+                let ctx = ExecutionContext {
+                    file_path: &file.path,
+                    content: &content,
+                    ast: None,
+                };
+                rule.execute(&ctx)
+            })
+            .collect();
+        all_violations.extend(regex_violations);
 
         all_violations
     }
