@@ -1,12 +1,15 @@
 //! File discovery and traversal with gitignore support
 //!
 //! This module provides gitignore-aware file walking with glob-based filtering
-//! and automatic language detection from file extensions.
+//! and automatic language detection using the ignore crate's TypesBuilder.
 
 use crate::types::{GlobPattern, Language};
 use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
+use ignore::types::{Types, TypesBuilder};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Errors that can occur during file walking
@@ -23,6 +26,77 @@ pub enum FileWalkerError {
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Detects programming languages for files using the ignore crate's TypesBuilder.
+///
+/// This uses the well-maintained file type definitions from ripgrep, gaining
+/// support for additional extensions like `.mts`, `.cts` for TypeScript,
+/// `.vue`, `.cjs`, `.mjs` for JavaScript, and `.pyi` for Python.
+#[derive(Clone)]
+pub struct LanguageDetector {
+    /// Map from Language to its Types matcher
+    matchers: Arc<HashMap<Language, Types>>,
+}
+
+impl LanguageDetector {
+    /// Creates a new LanguageDetector with matchers for all supported languages.
+    ///
+    /// If building a matcher for a language fails, that language is logged and skipped.
+    pub fn new() -> Self {
+        let mut matchers = HashMap::new();
+
+        for lang in Language::all() {
+            let type_name = lang.ignore_type_name();
+            let mut builder = TypesBuilder::new();
+            builder.add_defaults();
+            builder.select(type_name);
+
+            match builder.build() {
+                Ok(types) => {
+                    matchers.insert(lang, types);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to build language detector for {}: {}",
+                        type_name, e
+                    );
+                }
+            }
+        }
+
+        Self {
+            matchers: Arc::new(matchers),
+        }
+    }
+
+    /// Detects the language of a file based on its path.
+    ///
+    /// Returns the first matching language, or None if no language matches.
+    pub fn detect(&self, path: &Path) -> Option<Language> {
+        for lang in Language::all() {
+            if let Some(types) = self.matchers.get(&lang)
+                && types.matched(path, false).is_whitelist()
+            {
+                return Some(lang);
+            }
+        }
+        None
+    }
+}
+
+impl Default for LanguageDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Debug for LanguageDetector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LanguageDetector")
+            .field("languages", &self.matchers.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 /// Reason why a file was skipped
@@ -55,24 +129,17 @@ pub struct FileEntry {
 }
 
 impl FileEntry {
-    /// Creates a new FileEntry with language detection
-    pub fn new(path: PathBuf) -> Self {
-        let language = Self::detect_language(&path);
+    /// Creates a new FileEntry with language detection using the provided detector.
+    pub fn new(path: PathBuf, detector: &LanguageDetector) -> Self {
+        let language = detector.detect(&path);
         Self { path, language }
     }
 
-    /// Detects language from file extension
-    fn detect_language(path: &Path) -> Option<Language> {
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext {
-                "rs" => Some(Language::Rust),
-                "ts" | "tsx" => Some(Language::TypeScript),
-                "js" | "jsx" => Some(Language::JavaScript),
-                "py" => Some(Language::Python),
-                "go" => Some(Language::Go),
-                _ => None,
-            })
+    /// Creates a new FileEntry with a pre-determined language.
+    ///
+    /// This is useful when the language has already been detected.
+    pub fn with_language(path: PathBuf, language: Option<Language>) -> Self {
+        Self { path, language }
     }
 }
 
@@ -82,6 +149,7 @@ pub struct FileWalker {
     include_set: Option<globset::GlobSet>,
     exclude_set: Option<globset::GlobSet>,
     verbose: bool,
+    language_detector: LanguageDetector,
 }
 
 impl FileWalker {
@@ -135,11 +203,14 @@ impl FileWalker {
 
         let exclude_set = Some(Self::build_globset(&exclude_patterns)?);
 
+        let language_detector = LanguageDetector::new();
+
         Ok(Self {
             walker,
             include_set,
             exclude_set,
             verbose,
+            language_detector,
         })
     }
 
@@ -174,6 +245,7 @@ impl FileWalker {
         let include_set = self.include_set;
         let exclude_set = self.exclude_set;
         let verbose = self.verbose;
+        let language_detector = self.language_detector;
 
         self.walker.filter_map(move |result| {
             match result {
@@ -221,7 +293,22 @@ impl FileWalker {
                         }
                     }
 
-                    Some(Ok(WalkResult::File(FileEntry::new(path.to_path_buf()))))
+                    // Create FileEntry and check if it has a recognized language
+                    let file_entry = FileEntry::new(path.to_path_buf(), &language_detector);
+
+                    // Filter out non-program files (no recognized language)
+                    if file_entry.language.is_none() {
+                        if verbose {
+                            return Some(Ok(WalkResult::Skipped {
+                                path: path.to_path_buf(),
+                                reason: SkipReason::NoMatchingLanguage,
+                            }));
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    Some(Ok(WalkResult::File(file_entry)))
                 }
                 Err(e) => Some(Err(FileWalkerError::Walk(e))),
             }
@@ -235,70 +322,119 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn test_detect_language_rust() {
+    fn test_language_detector_new() {
+        let detector = LanguageDetector::new();
+        // Should have matchers for all languages
+        assert!(detector.matchers.len() >= 5);
+    }
+
+    #[test]
+    fn test_language_detector_detect_rust() {
+        let detector = LanguageDetector::new();
+        assert_eq!(detector.detect(Path::new("test.rs")), Some(Language::Rust));
+    }
+
+    #[test]
+    fn test_language_detector_detect_typescript() {
+        let detector = LanguageDetector::new();
+        assert_eq!(
+            detector.detect(Path::new("test.ts")),
+            Some(Language::TypeScript)
+        );
+        assert_eq!(
+            detector.detect(Path::new("test.tsx")),
+            Some(Language::TypeScript)
+        );
+        // Additional extensions supported by ignore crate
+        assert_eq!(
+            detector.detect(Path::new("test.mts")),
+            Some(Language::TypeScript)
+        );
+        assert_eq!(
+            detector.detect(Path::new("test.cts")),
+            Some(Language::TypeScript)
+        );
+    }
+
+    #[test]
+    fn test_language_detector_detect_javascript() {
+        let detector = LanguageDetector::new();
+        assert_eq!(
+            detector.detect(Path::new("test.js")),
+            Some(Language::JavaScript)
+        );
+        assert_eq!(
+            detector.detect(Path::new("test.jsx")),
+            Some(Language::JavaScript)
+        );
+        // Additional extensions supported by ignore crate
+        assert_eq!(
+            detector.detect(Path::new("test.mjs")),
+            Some(Language::JavaScript)
+        );
+        assert_eq!(
+            detector.detect(Path::new("test.cjs")),
+            Some(Language::JavaScript)
+        );
+    }
+
+    #[test]
+    fn test_language_detector_detect_python() {
+        let detector = LanguageDetector::new();
+        assert_eq!(
+            detector.detect(Path::new("test.py")),
+            Some(Language::Python)
+        );
+        // Additional extensions supported by ignore crate
+        assert_eq!(
+            detector.detect(Path::new("test.pyi")),
+            Some(Language::Python)
+        );
+    }
+
+    #[test]
+    fn test_language_detector_detect_go() {
+        let detector = LanguageDetector::new();
+        assert_eq!(detector.detect(Path::new("test.go")), Some(Language::Go));
+    }
+
+    #[test]
+    fn test_language_detector_detect_unknown() {
+        let detector = LanguageDetector::new();
+        assert_eq!(detector.detect(Path::new("test.txt")), None);
+    }
+
+    #[test]
+    fn test_language_detector_detect_no_extension() {
+        let detector = LanguageDetector::new();
+        assert_eq!(detector.detect(Path::new("Makefile")), None);
+    }
+
+    #[test]
+    fn test_file_entry_new_with_detector() {
+        let detector = LanguageDetector::new();
         let path = PathBuf::from("test.rs");
-        let entry = FileEntry::new(path.clone());
+        let entry = FileEntry::new(path.clone(), &detector);
         assert_eq!(entry.language, Some(Language::Rust));
         assert_eq!(entry.path, path);
     }
 
     #[test]
-    fn test_detect_language_typescript() {
-        let ts_path = PathBuf::from("test.ts");
-        let ts_entry = FileEntry::new(ts_path);
-        assert_eq!(ts_entry.language, Some(Language::TypeScript));
-
-        let tsx_path = PathBuf::from("test.tsx");
-        let tsx_entry = FileEntry::new(tsx_path);
-        assert_eq!(tsx_entry.language, Some(Language::TypeScript));
-    }
-
-    #[test]
-    fn test_detect_language_javascript() {
-        let js_path = PathBuf::from("test.js");
-        let js_entry = FileEntry::new(js_path);
-        assert_eq!(js_entry.language, Some(Language::JavaScript));
-
-        let jsx_path = PathBuf::from("test.jsx");
-        let jsx_entry = FileEntry::new(jsx_path);
-        assert_eq!(jsx_entry.language, Some(Language::JavaScript));
-    }
-
-    #[test]
-    fn test_detect_language_python() {
-        let path = PathBuf::from("test.py");
-        let entry = FileEntry::new(path);
-        assert_eq!(entry.language, Some(Language::Python));
-    }
-
-    #[test]
-    fn test_detect_language_go() {
-        let path = PathBuf::from("test.go");
-        let entry = FileEntry::new(path);
-        assert_eq!(entry.language, Some(Language::Go));
-    }
-
-    #[test]
-    fn test_detect_language_unknown() {
-        let path = PathBuf::from("test.txt");
-        let entry = FileEntry::new(path);
-        assert_eq!(entry.language, None);
-    }
-
-    #[test]
-    fn test_detect_language_no_extension() {
-        let path = PathBuf::from("Makefile");
-        let entry = FileEntry::new(path);
-        assert_eq!(entry.language, None);
+    fn test_file_entry_with_language() {
+        let path = PathBuf::from("test.rs");
+        let entry = FileEntry::with_language(path.clone(), Some(Language::Rust));
+        assert_eq!(entry.language, Some(Language::Rust));
+        assert_eq!(entry.path, path);
     }
 
     #[test]
     fn test_file_entry_equality() {
-        let entry1 = FileEntry::new(PathBuf::from("test.rs"));
-        let entry2 = FileEntry::new(PathBuf::from("test.rs"));
+        let detector = LanguageDetector::new();
+        let entry1 = FileEntry::new(PathBuf::from("test.rs"), &detector);
+        let entry2 = FileEntry::new(PathBuf::from("test.rs"), &detector);
         assert_eq!(entry1, entry2);
 
-        let entry3 = FileEntry::new(PathBuf::from("other.rs"));
+        let entry3 = FileEntry::new(PathBuf::from("other.rs"), &detector);
         assert_ne!(entry1, entry3);
     }
 
@@ -346,12 +482,13 @@ mod tests {
         let walker = FileWalker::new(&temp_dir, &[], &[]).expect("Failed to create walker");
         let files: Vec<_> = walker.walk().collect();
 
-        // Should find at least the two files we created
-        assert!(files.len() >= 2);
+        // Should find only the .rs file - .txt is filtered out (no recognized language)
+        assert_eq!(files.len(), 1);
 
-        // Check that all results are Ok
+        // Check that all results are Ok and are program files
         for result in &files {
-            assert!(result.is_ok());
+            let file = result.as_ref().expect("Should be Ok");
+            assert!(file.language.is_some(), "All files should have a language");
         }
 
         // Cleanup

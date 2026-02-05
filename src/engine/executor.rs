@@ -125,36 +125,41 @@ impl ExecutionEngine {
             None
         };
 
-        // Execute AST rules with the parsed tree
+        // Execute AST rules with the parsed tree (in parallel)
         if let Some(ref tree) = tree {
-            for rule in ast_rules {
-                // Try to downcast to AstRule to use execute_with_tree
-                if let Some(ast_rule) = self.try_downcast_ast_rule(rule) {
-                    let violations = ast_rule.execute_with_tree(tree, &content, &file.path);
-                    all_violations.extend(violations);
-                } else {
-                    // Fallback to regular execute (will re-parse internally)
-                    let ctx = ExecutionContext {
-                        file_path: &file.path,
-                        content: &content,
-                        ast: None,
-                    };
-                    let violations = rule.execute(&ctx);
-                    all_violations.extend(violations);
-                }
-            }
+            let ast_violations: Vec<Violation> = ast_rules
+                .par_iter()
+                .flat_map(|&rule| {
+                    // Try to downcast to AstRule to use execute_with_tree
+                    if let Some(ast_rule) = self.try_downcast_ast_rule(rule) {
+                        ast_rule.execute_with_tree(tree, &content, &file.path)
+                    } else {
+                        // Fallback to regular execute (will re-parse internally)
+                        let ctx = ExecutionContext {
+                            file_path: &file.path,
+                            content: &content,
+                            ast: None,
+                        };
+                        rule.execute(&ctx)
+                    }
+                })
+                .collect();
+            all_violations.extend(ast_violations);
         }
 
-        // Execute regex rules
-        for rule in regex_rules {
-            let ctx = ExecutionContext {
-                file_path: &file.path,
-                content: &content,
-                ast: None,
-            };
-            let violations = rule.execute(&ctx);
-            all_violations.extend(violations);
-        }
+        // Execute regex rules (in parallel)
+        let regex_violations: Vec<Violation> = regex_rules
+            .par_iter()
+            .flat_map(|&rule| {
+                let ctx = ExecutionContext {
+                    file_path: &file.path,
+                    content: &content,
+                    ast: None,
+                };
+                rule.execute(&ctx)
+            })
+            .collect();
+        all_violations.extend(regex_violations);
 
         all_violations
     }
@@ -217,6 +222,7 @@ impl ExecutionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::file_walker::LanguageDetector;
     use crate::rules::RegexRule;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -233,6 +239,11 @@ severity = "warning"
 pattern = "TODO"
 "#;
         RegexRule::from_toml(toml).unwrap()
+    }
+
+    // Helper to create a language detector for tests
+    fn test_detector() -> LanguageDetector {
+        LanguageDetector::new()
     }
 
     #[test]
@@ -268,8 +279,9 @@ pattern = "TODO"
         // For now, let's test with an empty registry
 
         let engine = ExecutionEngine::new(registry);
+        let detector = test_detector();
 
-        let files = vec![FileEntry::new(test_file.clone())];
+        let files = vec![FileEntry::new(test_file.clone(), &detector)];
         let result = engine.execute(files);
 
         // With no rules, we should get no violations
@@ -289,8 +301,12 @@ pattern = "TODO"
 
         let registry = RuleRegistry::new();
         let engine = ExecutionEngine::new(registry);
+        let detector = test_detector();
 
-        let files = vec![FileEntry::new(file1), FileEntry::new(file2)];
+        let files = vec![
+            FileEntry::new(file1, &detector),
+            FileEntry::new(file2, &detector),
+        ];
         let result = engine.execute(files);
 
         assert_eq!(result.files_checked, 2);
@@ -301,8 +317,11 @@ pattern = "TODO"
         let registry = RuleRegistry::new();
         let engine = ExecutionEngine::new(registry);
 
-        // File that doesn't exist
-        let files = vec![FileEntry::new(PathBuf::from("/nonexistent/file.rs"))];
+        // File that doesn't exist - use with_language since the file doesn't exist
+        let files = vec![FileEntry::with_language(
+            PathBuf::from("/nonexistent/file.rs"),
+            Some(Language::Rust),
+        )];
         let result = engine.execute(files);
 
         // Should handle gracefully - no violations, no crash
@@ -319,17 +338,18 @@ pattern = "TODO"
         let rule = create_test_regex_rule();
 
         // Rule with no language restrictions applies to all program files
-        let rust_file = FileEntry::new(PathBuf::from("test.rs"));
+        let rust_file = FileEntry::with_language(PathBuf::from("test.rs"), Some(Language::Rust));
         assert!(engine.rule_applies_to_file(&rule, &rust_file));
 
-        let python_file = FileEntry::new(PathBuf::from("test.py"));
+        let python_file =
+            FileEntry::with_language(PathBuf::from("test.py"), Some(Language::Python));
         assert!(engine.rule_applies_to_file(&rule, &python_file));
 
         // But does NOT apply to non-program files
-        let md_file = FileEntry::new(PathBuf::from("README.md"));
+        let md_file = FileEntry::with_language(PathBuf::from("README.md"), None);
         assert!(!engine.rule_applies_to_file(&rule, &md_file));
 
-        let toml_file = FileEntry::new(PathBuf::from("config.toml"));
+        let toml_file = FileEntry::with_language(PathBuf::from("config.toml"), None);
         assert!(!engine.rule_applies_to_file(&rule, &toml_file));
     }
 
@@ -351,8 +371,9 @@ languages = ["rust"]
 "#;
         let rule = RegexRule::from_toml(toml).unwrap();
 
-        let rust_file = FileEntry::new(PathBuf::from("test.rs"));
-        let python_file = FileEntry::new(PathBuf::from("test.py"));
+        let rust_file = FileEntry::with_language(PathBuf::from("test.rs"), Some(Language::Rust));
+        let python_file =
+            FileEntry::with_language(PathBuf::from("test.py"), Some(Language::Python));
 
         assert!(engine.rule_applies_to_file(&rule, &rust_file));
         assert!(!engine.rule_applies_to_file(&rule, &python_file));
@@ -413,10 +434,11 @@ languages = ["rust", "python"]
         let temp_dir = TempDir::new().unwrap();
 
         let mut files = Vec::new();
+        let detector = test_detector();
         for i in 0..10 {
             let file_path = temp_dir.path().join(format!("file{}.rs", i));
             fs::write(&file_path, format!("fn main{i}() {{}}")).unwrap();
-            files.push(FileEntry::new(file_path));
+            files.push(FileEntry::new(file_path, &detector));
         }
 
         let registry = RuleRegistry::new();
@@ -462,7 +484,8 @@ language = "rust"
         registry.load_custom_ast_rules(&ast_dir, None).unwrap();
 
         let engine = ExecutionEngine::new(registry);
-        let files = vec![FileEntry::new(test_file)];
+        let detector = test_detector();
+        let files = vec![FileEntry::new(test_file, &detector)];
         let result = engine.execute(files);
 
         // Should find the unwrap call
@@ -497,7 +520,8 @@ pattern = "TODO"
         registry.load_custom_regex_rules(&regex_dir, None).unwrap();
 
         let engine = ExecutionEngine::new(registry);
-        let files = vec![FileEntry::new(test_file)];
+        let detector = test_detector();
+        let files = vec![FileEntry::new(test_file, &detector)];
         let result = engine.execute(files);
 
         // Should find the TODO comment
