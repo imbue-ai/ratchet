@@ -11,12 +11,17 @@
 use ratchets::config::counts::CountsManager;
 use ratchets::engine::aggregator::ViolationAggregator;
 use ratchets::engine::executor::ExecutionEngine;
-use ratchets::engine::file_walker::FileEntry;
+use ratchets::engine::file_walker::{FileEntry, LanguageDetector};
 use ratchets::rules::RuleRegistry;
 use ratchets::types::{RegionPath, RuleId};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+
+/// Helper to create a language detector for tests
+fn test_detector() -> LanguageDetector {
+    LanguageDetector::new()
+}
 
 /// Helper to create a test file with known content
 fn create_test_file(dir: &Path, relative_path: &str, content: &str) -> PathBuf {
@@ -74,7 +79,8 @@ fn test_single_rule_single_file_within_budget() {
 
     // Execute
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     // Verify execution
@@ -121,7 +127,8 @@ fn test_single_rule_single_file_over_budget() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     assert_eq!(result.violations.len(), 2);
@@ -176,10 +183,11 @@ fn test_multiple_rules_multiple_files() {
     assert_eq!(registry.len(), 2);
 
     let engine = ExecutionEngine::new(registry);
+    let detector = test_detector();
     let files = vec![
-        FileEntry::new(file1),
-        FileEntry::new(file2),
-        FileEntry::new(file3),
+        FileEntry::new(file1, &detector),
+        FileEntry::new(file2, &detector),
+        FileEntry::new(file3, &detector),
     ];
     let result = engine.execute(files);
 
@@ -244,7 +252,11 @@ fn test_region_specific_budgets() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(src_file), FileEntry::new(legacy_file)];
+    let detector = test_detector();
+    let files = vec![
+        FileEntry::new(src_file, &detector),
+        FileEntry::new(legacy_file, &detector),
+    ];
     let result = engine.execute(files);
 
     assert_eq!(result.violations.len(), 4); // 1 in src + 3 in src/legacy
@@ -347,7 +359,11 @@ fn test_files_with_no_violations() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(file1), FileEntry::new(file2)];
+    let detector = test_detector();
+    let files = vec![
+        FileEntry::new(file1, &detector),
+        FileEntry::new(file2, &detector),
+    ];
     let result = engine.execute(files);
 
     // Should find no violations
@@ -372,13 +388,14 @@ fn test_parallel_execution_deterministic() {
 
     // Create many files to ensure parallel execution
     let mut files = Vec::new();
+    let detector = test_detector();
     for i in 0..50 {
         let file = create_test_file(
             temp_dir.path(),
             &format!("src/file{}.rs", i),
             &format!("// TODO: file {}\nfn test{}() {{}}", i, i),
         );
-        files.push(FileEntry::new(file));
+        files.push(FileEntry::new(file, &detector));
     }
 
     // Create rule
@@ -427,13 +444,14 @@ fn test_parallel_execution_no_race_conditions() {
 
     // Create files that would be processed by different threads
     let mut files = Vec::new();
+    let detector = test_detector();
     for i in 0..100 {
         let file = create_test_file(
             temp_dir.path(),
             &format!("src/module{}/file{}.rs", i / 10, i),
             &format!("// TODO: {}\nfn f{}() {{}}", i, i),
         );
-        files.push(FileEntry::new(file));
+        files.push(FileEntry::new(file, &detector));
     }
 
     // Create rule
@@ -509,7 +527,8 @@ query = """
 
     // Execute
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     // Should find both violations
@@ -551,7 +570,8 @@ fn test_budget_enforcement_pass() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     assert_eq!(result.violations.len(), 2);
@@ -589,7 +609,8 @@ fn test_budget_enforcement_fail() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     assert_eq!(result.violations.len(), 3);
@@ -629,10 +650,11 @@ fn test_region_inheritance_chain() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
+    let detector = test_detector();
     let files = vec![
-        FileEntry::new(root_file),
-        FileEntry::new(src_file),
-        FileEntry::new(nested_file),
+        FileEntry::new(root_file, &detector),
+        FileEntry::new(src_file, &detector),
+        FileEntry::new(nested_file, &detector),
     ];
     let result = engine.execute(files);
 
@@ -704,10 +726,11 @@ fn test_aggregation_groups_by_rule_and_region() {
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
+    let detector = test_detector();
     let files = vec![
-        FileEntry::new(src1),
-        FileEntry::new(src2),
-        FileEntry::new(tests),
+        FileEntry::new(src1, &detector),
+        FileEntry::new(src2, &detector),
+        FileEntry::new(tests, &detector),
     ];
     let result = engine.execute(files);
 
@@ -778,7 +801,8 @@ fn test_no_rules_loaded() {
     // Create engine with empty registry
     let registry = RuleRegistry::new();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     // Should process file but find no violations
@@ -818,7 +842,8 @@ languages = ["rust"]
     let mut registry = RuleRegistry::new();
     registry.load_custom_regex_rules(&rules_dir, None).unwrap();
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     // Should process file but find no violations (rule doesn't apply to Python)
@@ -906,7 +931,8 @@ query = """
 
     // Execute - the engine should parse the AST once and reuse it for all 3 rules
     let engine = ExecutionEngine::new(registry);
-    let files = vec![FileEntry::new(test_file)];
+    let detector = test_detector();
+    let files = vec![FileEntry::new(test_file, &detector)];
     let result = engine.execute(files);
 
     // Should find all 3 violations (1 unwrap, 1 expect, 1 panic)

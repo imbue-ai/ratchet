@@ -189,6 +189,31 @@ impl From<&str> for GlobPattern {
     }
 }
 
+impl Language {
+    /// Returns the ignore crate type name for this language
+    pub fn ignore_type_name(&self) -> &'static str {
+        match self {
+            Language::Rust => "rust",
+            Language::TypeScript => "ts",
+            Language::JavaScript => "js",
+            Language::Python => "py",
+            Language::Go => "go",
+        }
+    }
+
+    /// Returns an iterator over all language variants
+    pub fn all() -> impl Iterator<Item = Language> {
+        [
+            Language::Rust,
+            Language::TypeScript,
+            Language::JavaScript,
+            Language::Python,
+            Language::Go,
+        ]
+        .into_iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,5 +541,25 @@ mod tests {
 
         assert_eq!(GlobPattern::new("*.rs"), GlobPattern::new("*.rs"));
         assert_ne!(GlobPattern::new("*.rs"), GlobPattern::new("*.toml"));
+    }
+
+    #[test]
+    fn test_language_ignore_type_name() {
+        assert_eq!(Language::Rust.ignore_type_name(), "rust");
+        assert_eq!(Language::TypeScript.ignore_type_name(), "ts");
+        assert_eq!(Language::JavaScript.ignore_type_name(), "js");
+        assert_eq!(Language::Python.ignore_type_name(), "py");
+        assert_eq!(Language::Go.ignore_type_name(), "go");
+    }
+
+    #[test]
+    fn test_language_all() {
+        let languages: Vec<_> = Language::all().collect();
+        assert_eq!(languages.len(), 5);
+        assert!(languages.contains(&Language::Rust));
+        assert!(languages.contains(&Language::TypeScript));
+        assert!(languages.contains(&Language::JavaScript));
+        assert!(languages.contains(&Language::Python));
+        assert!(languages.contains(&Language::Go));
     }
 }
